@@ -3,15 +3,15 @@ Zbulues i Lajmeve te Rreme (Fake News Detector) - Almira Mecaj, Diplome ML
 Streamlit demo app per pjesen praktike te punimit:
 "Evaluating Bias and Fairness of Multilingual Models on Albanian Fake News"
 """
-
+ 
 import streamlit as st
 import streamlit.components.v1 as components
 import torch
 import trafilatura
 import pandas as pd
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
-
-
+ 
+ 
 def inject_pwa_head():
     """Shton manifest.json dhe ikonen ne <head> te faqes, qe app-i te jete
     'i instalueshem' (Add to Home Screen / APK me PWABuilder), si nje app real."""
@@ -20,9 +20,11 @@ def inject_pwa_head():
         <script>
         (function() {
             const parentDoc = window.parent.document;
-            const manifestUrl = window.location.origin + '/app/static/manifest.json';
-            const iconUrl = window.location.origin + '/app/static/icon-192.png';
-
+            // Streamlit Cloud's own static-file serving proved unreliable, so the
+            // manifest + icons are hosted directly on GitHub's raw CDN instead.
+            const manifestUrl = 'https://raw.githubusercontent.com/almiramecaj947-bot/fake-news-detector-shqip/main/static/manifest.json';
+            const iconUrl = 'https://raw.githubusercontent.com/almiramecaj947-bot/fake-news-detector-shqip/main/static/icon-192.png';
+ 
             // Streamlit ships its own default manifest link — override it (don't
             // just skip if one exists, or our manifest never wins).
             let manifestLink = parentDoc.querySelector('link[rel="manifest"]');
@@ -32,7 +34,7 @@ def inject_pwa_head():
                 parentDoc.head.appendChild(manifestLink);
             }
             manifestLink.href = manifestUrl;
-
+ 
             let appleIcon = parentDoc.querySelector('link[rel="apple-touch-icon"]');
             if (!appleIcon) {
                 appleIcon = parentDoc.createElement('link');
@@ -40,7 +42,7 @@ def inject_pwa_head():
                 parentDoc.head.appendChild(appleIcon);
             }
             appleIcon.href = iconUrl;
-
+ 
             let themeMeta = parentDoc.querySelector('meta[name="theme-color"]');
             if (!themeMeta) {
                 themeMeta = parentDoc.createElement('meta');
@@ -54,8 +56,8 @@ def inject_pwa_head():
         height=0,
         width=0,
     )
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # KONFIGURIMI I MODELEVE
 # ---------------------------------------------------------------------------
@@ -71,9 +73,9 @@ MODELS = {
         "accuracy": "91.1%",
     },
 }
-
+ 
 LABELS = {0: "REAL", 1: "FAKE"}
-
+ 
 EXAMPLES = {
     "📗  Shembull real": (
         "Adelina e tepron me fustanin e shkurtër Adelina Tahiri është një ndër femrat më "
@@ -90,27 +92,27 @@ EXAMPLES = {
         "dhe vendet tjera” — shiko pamjet se si mund të udhëtojnë mërgimtarët për në vendlindje."
     ),
 }
-
+ 
 # ---------------------------------------------------------------------------
 # UI SETUP
 # ---------------------------------------------------------------------------
 st.set_page_config(page_title="Verifiko — Zbulues i Lajmeve të Rreme", page_icon="🛡️", layout="centered")
 inject_pwa_head()
-
+ 
 st.markdown(
     """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
-
+ 
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-
+ 
     /* hide default streamlit chrome for an app-like feel */
     #MainMenu { visibility: hidden; }
     footer { visibility: hidden; }
     [data-testid="stHeader"] { background: transparent; }
     [data-testid="stToolbar"] { display: none; }
     .block-container { padding-top: 1.6rem; max-width: 760px; }
-
+ 
     /* ---------- HERO ---------- */
     .hero {
         display: flex; align-items: center; gap: 1rem;
@@ -129,14 +131,14 @@ st.markdown(
         font-weight: 800; color: #ffffff; letter-spacing: -0.3px;
     }
     .hero-text p { margin: 0.3rem 0 0 0; color: rgba(255,255,255,0.85); font-size: 0.92rem; line-height: 1.4; }
-
+ 
     .pill-row { display: flex; gap: 0.5rem; margin-bottom: 1.4rem; flex-wrap: wrap; }
     .pill {
         display: inline-flex; align-items: center; gap: 0.35rem;
         padding: 0.4rem 0.9rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600;
         background: #f3f0ff; color: #5b21b6; border: 1px solid #e4d9ff;
     }
-
+ 
     /* ---------- SECTION CARD ---------- */
     .app-card {
         background: #ffffff; border: 1px solid #ececf3; border-radius: 20px;
@@ -146,10 +148,10 @@ st.markdown(
         font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 1rem;
         color: #1f2937; margin-bottom: 0.7rem; display: flex; align-items: center; gap: 0.45rem;
     }
-
+ 
     /* ---------- MODEL PICKER (segmented) ---------- */
     div[role="radiogroup"] { gap: 0.5rem; }
-
+ 
     /* buttons — set bg + text color together always, avoid white-on-white regressions */
     .stButton > button {
         border-radius: 12px !important; font-weight: 600 !important; border: 1px solid #e5e7eb !important;
@@ -162,7 +164,7 @@ st.markdown(
         box-shadow: 0 8px 20px rgba(91,33,182,0.30) !important;
     }
     .stButton > button[kind="primary"]:hover { filter: brightness(1.06); color: #ffffff !important; }
-
+ 
     /* tabs -> pill nav */
     [data-baseweb="tab-list"] { gap: 0.4rem; background: #f4f4f8; padding: 0.35rem; border-radius: 14px; }
     [data-baseweb="tab"] {
@@ -172,7 +174,7 @@ st.markdown(
         background: #ffffff !important; color: #5b21b6 !important;
         box-shadow: 0 2px 8px rgba(17,24,39,0.08);
     }
-
+ 
     /* ---------- VERDICT CARD ---------- */
     .verdict-card {
         display: flex; align-items: center; gap: 1.2rem; border-radius: 20px;
@@ -194,12 +196,12 @@ st.markdown(
     .vbar-row span:last-child { width: 34px; text-align: right; }
     .vbar-track { flex: 1; height: 7px; border-radius: 999px; background: #eef0f4; overflow: hidden; }
     .vbar-fill { height: 100%; border-radius: 999px; }
-
+ 
     .disclaimer {
         font-size: 0.78rem; color: #9ca3af; text-align: center; margin-top: 1.4rem; line-height: 1.4;
     }
     </style>
-
+ 
     <div class="hero">
         <div class="hero-icon">🛡️</div>
         <div class="hero-text">
@@ -216,9 +218,9 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
+ 
 tab_analyze, tab_findings = st.tabs(["🔍  Analizo", "📊  Gjetjet"])
-
+ 
 # ---------------------------------------------------------------------------
 # MODEL LOADING / PREDIKIMI
 # ---------------------------------------------------------------------------
@@ -228,8 +230,8 @@ def load_model(model_path: str):
     model = AutoModelForSequenceClassification.from_pretrained(model_path)
     model.eval()
     return tokenizer, model
-
-
+ 
+ 
 def predict(text: str, model_path: str):
     tokenizer, model = load_model(model_path)
     inputs = tokenizer(text, truncation=True, padding=True, max_length=256, return_tensors="pt")
@@ -238,8 +240,8 @@ def predict(text: str, model_path: str):
         probs = torch.softmax(logits, dim=1)[0]
     pred_id = int(torch.argmax(probs))
     return LABELS.get(pred_id, str(pred_id)), float(probs[pred_id]), probs.tolist()
-
-
+ 
+ 
 def fetch_article_text(url: str) -> str:
     downloaded = trafilatura.fetch_url(url)
     if downloaded is None:
@@ -248,8 +250,8 @@ def fetch_article_text(url: str) -> str:
     if not extracted or not extracted.strip():
         raise ValueError("S'u gjet tekst artikulli në këtë faqe.")
     return extracted.strip()
-
-
+ 
+ 
 def render_result(label, confidence, all_probs, model_name):
     is_fake = label == "FAKE"
     accent = "#dc2626" if is_fake else "#16a34a"
@@ -275,8 +277,8 @@ def render_result(label, confidence, all_probs, model_name):
         """,
         unsafe_allow_html=True,
     )
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # TAB 1: ANALIZO
 # ---------------------------------------------------------------------------
@@ -288,7 +290,7 @@ with tab_analyze:
     )
     st.caption(f"{MODELS[model_choice]['description']} · saktësi few-shot: **{MODELS[model_choice]['accuracy']}**")
     st.markdown('</div>', unsafe_allow_html=True)
-
+ 
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
     st.markdown('<div class="app-card-title">✨ Shembuj të shpejtë</div>', unsafe_allow_html=True)
     ex_cols = st.columns(len(EXAMPLES))
@@ -297,14 +299,14 @@ with tab_analyze:
             st.session_state["input_text"] = ex_text
             st.session_state["fetched_text"] = ex_text
     st.markdown('</div>', unsafe_allow_html=True)
-
+ 
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
     st.markdown('<div class="app-card-title">📝 Artikulli</div>', unsafe_allow_html=True)
     input_mode = st.radio(
         "Si do ta japësh lajmin?", ["Ngjit tekstin", "Vendos link (URL)"],
         horizontal=True, label_visibility="collapsed",
     )
-
+ 
     if input_mode == "Ngjit tekstin":
         text = st.text_area(
             "Ngjit tekstin e një lajmi në shqip:",
@@ -332,12 +334,12 @@ with tab_analyze:
             value=st.session_state.get("fetched_text", ""),
             height=170,
         )
-
+ 
     col1, col2 = st.columns([1, 1])
     analyze = col1.button("🔍 Analizo", type="primary", use_container_width=True)
     compare = col2.button("⚖️ Krahaso modelet", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
-
+ 
     if analyze or compare:
         if not text.strip():
             st.warning("Fut një tekst para se të analizosh.")
@@ -361,13 +363,13 @@ with tab_analyze:
                     f"S'u gjet modeli te `{model_path}`. Kontrollo variablën MODELS "
                     "në krye të app.py."
                 )
-
+ 
     st.markdown(
         '<p class="disclaimer">Kujdes: ky është një prototip akademik për demonstrim, jo një mjet '
         'i verifikuar për përdorim në prodhim. Rezultatet duhen interpretuar me kujdes.</p>',
         unsafe_allow_html=True,
     )
-
+ 
 # ---------------------------------------------------------------------------
 # TAB 2: GJETJET E KERKIMIT
 # ---------------------------------------------------------------------------
@@ -387,7 +389,7 @@ with tab_findings:
     st.dataframe(results_df, hide_index=True, use_container_width=True)
     st.caption("Vlerat në % (accuracy mbi 594 artikuj testimi shqip).")
     st.markdown('</div>', unsafe_allow_html=True)
-
+ 
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
     st.markdown('<div class="app-card-title">📏 Bias sipas gjatësisë së artikullit</div>', unsafe_allow_html=True)
     st.caption("XLM-R, model few-shot")
@@ -402,7 +404,7 @@ with tab_findings:
     }).set_index("Grupi")
     st.bar_chart(bias_df)
     st.markdown('</div>', unsafe_allow_html=True)
-
+ 
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
     st.markdown('<div class="app-card-title">⚖️ Drejtësia ndër-gjuhësore (zero-shot)</div>', unsafe_allow_html=True)
     st.markdown(
