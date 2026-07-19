@@ -20,24 +20,34 @@ def inject_pwa_head():
         <script>
         (function() {
             const parentDoc = window.parent.document;
-            if (!parentDoc.querySelector('link[rel="manifest"]')) {
-                const link = parentDoc.createElement('link');
-                link.rel = 'manifest';
-                link.href = './app/static/manifest.json';
-                parentDoc.head.appendChild(link);
+            const manifestUrl = window.location.origin + '/app/static/manifest.json';
+            const iconUrl = window.location.origin + '/app/static/icon-192.png';
+
+            // Streamlit ships its own default manifest link — override it (don't
+            // just skip if one exists, or our manifest never wins).
+            let manifestLink = parentDoc.querySelector('link[rel="manifest"]');
+            if (!manifestLink) {
+                manifestLink = parentDoc.createElement('link');
+                manifestLink.rel = 'manifest';
+                parentDoc.head.appendChild(manifestLink);
             }
-            if (!parentDoc.querySelector('link[rel="apple-touch-icon"]')) {
-                const icon = parentDoc.createElement('link');
-                icon.rel = 'apple-touch-icon';
-                icon.href = './app/static/icon-192.png';
-                parentDoc.head.appendChild(icon);
+            manifestLink.href = manifestUrl;
+
+            let appleIcon = parentDoc.querySelector('link[rel="apple-touch-icon"]');
+            if (!appleIcon) {
+                appleIcon = parentDoc.createElement('link');
+                appleIcon.rel = 'apple-touch-icon';
+                parentDoc.head.appendChild(appleIcon);
             }
-            if (!parentDoc.querySelector('meta[name="theme-color"]')) {
-                const meta = parentDoc.createElement('meta');
-                meta.name = 'theme-color';
-                meta.content = '#5b21b6';
-                parentDoc.head.appendChild(meta);
+            appleIcon.href = iconUrl;
+
+            let themeMeta = parentDoc.querySelector('meta[name="theme-color"]');
+            if (!themeMeta) {
+                themeMeta = parentDoc.createElement('meta');
+                themeMeta.name = 'theme-color';
+                parentDoc.head.appendChild(themeMeta);
             }
+            themeMeta.content = '#5b21b6';
         })();
         </script>
         """,
