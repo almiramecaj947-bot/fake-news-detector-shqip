@@ -2,18 +2,18 @@
   "name": "Verifiko — Zbulues i Lajmeve te Rreme",
   "short_name": "Verifiko",
   "description": "Zbulues i lajmeve te rreme ne shqip - Diplome ML (Almira Mecaj)",
-  "start_url": ".",
+  "start_url": "https://fake-news-detector-shqip-2jjmg6l3uqqjs2mjpg3wkr.streamlit.app/",
   "display": "standalone",
   "background_color": "#5b21b6",
   "theme_color": "#5b21b6",
   "icons": [
     {
-      "src": "/app/static/icon-192.png",
+      "src": "https://raw.githubusercontent.com/almiramecaj947-bot/fake-news-detector-shqip/main/static/icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/app/static/icon-512.png",
+      "src": "https://raw.githubusercontent.com/almiramecaj947-bot/fake-news-detector-shqip/main/static/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }
