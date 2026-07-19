@@ -1,11 +1,11 @@
 {
-  "name": "Zbulues i Lajmeve te Rreme",
-  "short_name": "FakeNewsAL",
+  "name": "Verifiko — Zbulues i Lajmeve te Rreme",
+  "short_name": "Verifiko",
   "description": "Zbulues i lajmeve te rreme ne shqip - Diplome ML (Almira Mecaj)",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#4f46e5",
-  "theme_color": "#4f46e5",
+  "background_color": "#5b21b6",
+  "theme_color": "#5b21b6",
   "icons": [
     {
       "src": "icon-192.png",
