@@ -12,66 +12,52 @@ import pandas as pd
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
  
  
-def inject_pwa_head():
-    """Shton manifest.json dhe ikonen ne <head> te faqes, qe app-i te jete
-    'i instalueshem' (Add to Home Screen / APK me PWABuilder), si nje app real."""
-    components.html(
-        """
-        <script>
-        (function() {
-            const parentDoc = window.parent.document;
-            // Streamlit Cloud's own static-file serving proved unreliable, so the
-            // manifest + icons are hosted directly on GitHub's raw CDN instead.
-            const manifestUrl = 'https://raw.githubusercontent.com/almiramecaj947-bot/fake-news-detector-shqip/main/static/manifest.json';
-            const iconUrl = 'https://raw.githubusercontent.com/almiramecaj947-bot/fake-news-detector-shqip/main/static/icon-192.png';
+import pathlib
  
-            // Streamlit ships its own default manifest link — override it (don't
-            // just skip if one exists, or our manifest never wins).
-            let manifestLink = parentDoc.querySelector('link[rel="manifest"]');
-            if (!manifestLink) {
-                manifestLink = parentDoc.createElement('link');
-                manifestLink.rel = 'manifest';
-                parentDoc.head.appendChild(manifestLink);
-            }
-            manifestLink.href = manifestUrl;
  
-            let appleIcon = parentDoc.querySelector('link[rel="apple-touch-icon"]');
-            if (!appleIcon) {
-                appleIcon = parentDoc.createElement('link');
-                appleIcon.rel = 'apple-touch-icon';
-                parentDoc.head.appendChild(appleIcon);
-            }
-            appleIcon.href = iconUrl;
+def _install_pwa_head_tags():
+    """Fut manifest.json, ikonen dhe meta-tags iOS direkt ne HTML-in qe
+    Streamlit i sherben cdo kerkese, duke modifikuar file-in index.html te
+    vete paketes 'streamlit' ne disk (nje here, kur nis app-i).
  
-            let themeMeta = parentDoc.querySelector('meta[name="theme-color"]');
-            if (!themeMeta) {
-                themeMeta = parentDoc.createElement('meta');
-                themeMeta.name = 'theme-color';
-                parentDoc.head.appendChild(themeMeta);
-            }
-            themeMeta.content = '#5b21b6';
+    Kjo eshte shume me e qendrueshme se metoda e vjeter (nje <script> brenda
+    nje iframe qe perpiqej te shkruante ne window.parent.document) - ajo
+    metode varej nga koha e ekzekutimit dhe nga rregullat sandbox te iframe-ve,
+    dhe Streamlit Community Cloud e bllokonte shpesh pa dhene gabim te dukshem.
+    Duke i shkruar tag-et direkt ne index.html, ato jane pjese e HTML-it real
+    qe merr Safari - pa varesi nga JavaScript apo nga koha."""
+    try:
+        index_path = pathlib.Path(st.__path__[0]) / "static" / "index.html"
+        html = index_path.read_text(encoding="utf-8")
+        marker = "<!-- verifiko-pwa-tags -->"
+        if marker in html:
+            return  # eshte futur tashme, mos e perserit
  
-            // iOS-specific tags: without these, "Add to Home Screen" just makes a
-            // bookmark that opens in Safari with the address bar still showing.
-            // With them, it opens full-screen, standalone, like a real app.
-            function setMeta(name, content) {
-                let m = parentDoc.querySelector('meta[name="' + name + '"]');
-                if (!m) {
-                    m = parentDoc.createElement('meta');
-                    m.name = name;
-                    parentDoc.head.appendChild(m);
-                }
-                m.content = content;
-            }
-            setMeta('apple-mobile-web-app-capable', 'yes');
-            setMeta('apple-mobile-web-app-status-bar-style', 'black-translucent');
-            setMeta('apple-mobile-web-app-title', 'Verifiko');
-        })();
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
+        manifest_url = (
+            "https://raw.githubusercontent.com/almiramecaj947-bot/"
+            "fake-news-detector-shqip/main/static/manifest.json"
+        )
+        icon_url = (
+            "https://raw.githubusercontent.com/almiramecaj947-bot/"
+            "fake-news-detector-shqip/main/static/icon-192.png"
+        )
+        tags = (
+            marker + "\n"
+            f'<link rel="manifest" href="{manifest_url}">\n'
+            f'<link rel="apple-touch-icon" href="{icon_url}">\n'
+            '<meta name="theme-color" content="#5b21b6">\n'
+            '<meta name="apple-mobile-web-app-capable" content="yes">\n'
+            '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">\n'
+            '<meta name="apple-mobile-web-app-title" content="Verifiko">\n'
+        )
+        html = html.replace("</head>", tags + "</head>")
+        index_path.write_text(html, encoding="utf-8")
+    except Exception:
+        # nese diçka shkon keq (p.sh. s'ka leje shkrimi), mos e cmito app-in
+        pass
+ 
+ 
+_install_pwa_head_tags()
  
  
 # ---------------------------------------------------------------------------
@@ -113,7 +99,6 @@ EXAMPLES = {
 # UI SETUP
 # ---------------------------------------------------------------------------
 st.set_page_config(page_title="Verifiko — Zbulues i Lajmeve të Rreme", page_icon="🛡️", layout="centered")
-inject_pwa_head()
  
 st.markdown(
     """
@@ -430,4 +415,5 @@ with tab_findings:
     )
     st.info("Për detaje të plota metodologjike, shih Kreun III–IV të punimit të diplomës.")
     st.markdown('</div>', unsafe_allow_html=True)
+ 
  
