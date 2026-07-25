@@ -50,6 +50,22 @@ def inject_pwa_head():
                 parentDoc.head.appendChild(themeMeta);
             }
             themeMeta.content = '#5b21b6';
+ 
+            // iOS-specific tags: without these, "Add to Home Screen" just makes a
+            // bookmark that opens in Safari with the address bar still showing.
+            // With them, it opens full-screen, standalone, like a real app.
+            function setMeta(name, content) {
+                let m = parentDoc.querySelector('meta[name="' + name + '"]');
+                if (!m) {
+                    m = parentDoc.createElement('meta');
+                    m.name = name;
+                    parentDoc.head.appendChild(m);
+                }
+                m.content = content;
+            }
+            setMeta('apple-mobile-web-app-capable', 'yes');
+            setMeta('apple-mobile-web-app-status-bar-style', 'black-translucent');
+            setMeta('apple-mobile-web-app-title', 'Verifiko');
         })();
         </script>
         """,
@@ -414,3 +430,4 @@ with tab_findings:
     )
     st.info("Për detaje të plota metodologjike, shih Kreun III–IV të punimit të diplomës.")
     st.markdown('</div>', unsafe_allow_html=True)
+ 
