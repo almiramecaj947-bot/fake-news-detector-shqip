@@ -1,38 +1,36 @@
 """
-Zbulues i Lajmeve te Rreme (Fake News Detector) - Almira Mecaj, Diplome ML
-Streamlit demo app per pjesen praktike te punimit:
-"Evaluating Bias and Fairness of Multilingual Models on Albanian Fake News"
+Verifiko - Zbulues i Lajmeve te Rreme (Fake News Detector)
+Almira Mecaj, Diplome ML - "Evaluating Bias and Fairness of Multilingual
+Models on Albanian Fake News"
+ 
+Kjo verzion shton nje shtrese "AI ruling" (Gemini) mbi klasifikuesin XLM-R/mBERT:
+- Truth Score  -> direkt nga modeli i trajnuar (REAL confidence) - baza akademike e diplomes
+- Reliability / Consensus / Impact -> vleresim kontekstual nga Gemini (LLM), jo nga modeli klasifikues
+- Key Findings, Debate Comments, Verdikti final -> tekst i gjeneruar nga Gemini
 """
  
+import json
+import pathlib
+import re
+ 
+import pandas as pd
+import requests
 import streamlit as st
-import streamlit.components.v1 as components
 import torch
 import trafilatura
-import pandas as pd
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
  
- 
-import pathlib
- 
- 
+# ---------------------------------------------------------------------------
+# PWA HEAD TAGS (manifest, ikone, iOS meta) - shkruhen direkt ne index.html
+# te vete paketes streamlit ne disk, nje here, kur nis app-i.
+# ---------------------------------------------------------------------------
 def _install_pwa_head_tags():
-    """Fut manifest.json, ikonen dhe meta-tags iOS direkt ne HTML-in qe
-    Streamlit i sherben cdo kerkese, duke modifikuar file-in index.html te
-    vete paketes 'streamlit' ne disk (nje here, kur nis app-i).
- 
-    Kjo eshte shume me e qendrueshme se metoda e vjeter (nje <script> brenda
-    nje iframe qe perpiqej te shkruante ne window.parent.document) - ajo
-    metode varej nga koha e ekzekutimit dhe nga rregullat sandbox te iframe-ve,
-    dhe Streamlit Community Cloud e bllokonte shpesh pa dhene gabim te dukshem.
-    Duke i shkruar tag-et direkt ne index.html, ato jane pjese e HTML-it real
-    qe merr Safari - pa varesi nga JavaScript apo nga koha."""
     try:
         index_path = pathlib.Path(st.__path__[0]) / "static" / "index.html"
         html = index_path.read_text(encoding="utf-8")
         marker = "<!-- verifiko-pwa-tags -->"
         if marker in html:
-            return  # eshte futur tashme, mos e perserit
- 
+            return
         manifest_url = (
             "https://raw.githubusercontent.com/almiramecaj947-bot/"
             "fake-news-detector-shqip/main/static/manifest.json"
@@ -45,7 +43,7 @@ def _install_pwa_head_tags():
             marker + "\n"
             f'<link rel="manifest" href="{manifest_url}">\n'
             f'<link rel="apple-touch-icon" href="{icon_url}">\n'
-            '<meta name="theme-color" content="#5b21b6">\n'
+            '<meta name="theme-color" content="#0b0b12">\n'
             '<meta name="apple-mobile-web-app-capable" content="yes">\n'
             '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">\n'
             '<meta name="apple-mobile-web-app-title" content="Verifiko">\n'
@@ -53,15 +51,13 @@ def _install_pwa_head_tags():
         html = html.replace("</head>", tags + "</head>")
         index_path.write_text(html, encoding="utf-8")
     except Exception:
-        # nese diçka shkon keq (p.sh. s'ka leje shkrimi), mos e cmito app-in
         pass
  
  
 _install_pwa_head_tags()
  
- 
 # ---------------------------------------------------------------------------
-# KONFIGURIMI I MODELEVE
+# KONFIGURIMI I MODELEVE (klasifikuesi - baza akademike)
 # ---------------------------------------------------------------------------
 MODELS = {
     "XLM-R": {
@@ -75,7 +71,6 @@ MODELS = {
         "accuracy": "91.1%",
     },
 }
- 
 LABELS = {0: "REAL", 1: "FAKE"}
  
 EXAMPLES = {
@@ -95,135 +90,99 @@ EXAMPLES = {
     ),
 }
  
-# ---------------------------------------------------------------------------
-# UI SETUP
-# ---------------------------------------------------------------------------
-st.set_page_config(page_title="Verifiko — Zbulues i Lajmeve të Rreme", page_icon="🛡️", layout="centered")
- 
-st.markdown(
-    """
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
- 
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
- 
-    /* hide default streamlit chrome for an app-like feel */
-    #MainMenu { visibility: hidden; }
-    footer { visibility: hidden; }
-    [data-testid="stHeader"] { background: transparent; }
-    [data-testid="stToolbar"] { display: none; }
-    .block-container { padding-top: 1.6rem; max-width: 760px; }
- 
-    /* ---------- HERO ---------- */
-    .hero {
-        display: flex; align-items: center; gap: 1rem;
-        padding: 1.7rem 1.7rem; border-radius: 24px; margin-bottom: 1.1rem;
-        background: linear-gradient(135deg, #6d28d9 0%, #5b21b6 55%, #4c1d95 100%);
-        box-shadow: 0 16px 40px rgba(91,33,182,0.35);
-    }
-    .hero-icon {
-        flex-shrink: 0; width: 56px; height: 56px; border-radius: 16px;
-        background: rgba(255,255,255,0.16); display: flex; align-items: center;
-        justify-content: center; font-size: 1.8rem;
-        border: 1px solid rgba(255,255,255,0.25);
-    }
-    .hero-text h1 {
-        font-family: 'Poppins', sans-serif; margin: 0; font-size: 1.55rem;
-        font-weight: 800; color: #ffffff; letter-spacing: -0.3px;
-    }
-    .hero-text p { margin: 0.3rem 0 0 0; color: rgba(255,255,255,0.85); font-size: 0.92rem; line-height: 1.4; }
- 
-    .pill-row { display: flex; gap: 0.5rem; margin-bottom: 1.4rem; flex-wrap: wrap; }
-    .pill {
-        display: inline-flex; align-items: center; gap: 0.35rem;
-        padding: 0.4rem 0.9rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600;
-        background: #f3f0ff; color: #5b21b6; border: 1px solid #e4d9ff;
-    }
- 
-    /* ---------- SECTION CARD ---------- */
-    .app-card {
-        background: #ffffff; border: 1px solid #ececf3; border-radius: 20px;
-        padding: 1.3rem 1.4rem; margin-bottom: 1rem; box-shadow: 0 4px 18px rgba(17,24,39,0.05);
-    }
-    .app-card-title {
-        font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 1rem;
-        color: #1f2937; margin-bottom: 0.7rem; display: flex; align-items: center; gap: 0.45rem;
-    }
- 
-    /* ---------- MODEL PICKER (segmented) ---------- */
-    div[role="radiogroup"] { gap: 0.5rem; }
- 
-    /* buttons — set bg + text color together always, avoid white-on-white regressions */
-    .stButton > button {
-        border-radius: 12px !important; font-weight: 600 !important; border: 1px solid #e5e7eb !important;
-        background: #f9fafb !important; color: #374151 !important;
-    }
-    .stButton > button:hover { border-color: #c4b5fd !important; color: #5b21b6 !important; }
-    .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #7c3aed, #5b21b6) !important;
-        color: #ffffff !important; border: none !important;
-        box-shadow: 0 8px 20px rgba(91,33,182,0.30) !important;
-    }
-    .stButton > button[kind="primary"]:hover { filter: brightness(1.06); color: #ffffff !important; }
- 
-    /* tabs -> pill nav */
-    [data-baseweb="tab-list"] { gap: 0.4rem; background: #f4f4f8; padding: 0.35rem; border-radius: 14px; }
-    [data-baseweb="tab"] {
-        border-radius: 10px !important; font-weight: 600; color: #6b7280;
-    }
-    [aria-selected="true"][data-baseweb="tab"] {
-        background: #ffffff !important; color: #5b21b6 !important;
-        box-shadow: 0 2px 8px rgba(17,24,39,0.08);
-    }
- 
-    /* ---------- VERDICT CARD ---------- */
-    .verdict-card {
-        display: flex; align-items: center; gap: 1.2rem; border-radius: 20px;
-        padding: 1.3rem 1.4rem; margin-top: 0.6rem; border: 1px solid; box-shadow: 0 6px 20px rgba(17,24,39,0.06);
-    }
-    .verdict-gauge {
-        flex-shrink: 0; width: 92px; height: 92px; border-radius: 50%;
-        display: flex; align-items: center; justify-content: center;
-    }
-    .verdict-gauge-inner {
-        width: 70px; height: 70px; border-radius: 50%; background: #ffffff;
-        display: flex; align-items: center; justify-content: center;
-        font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 1.05rem;
-    }
-    .verdict-label { font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 1.15rem; }
-    .verdict-sub { color: #6b7280; font-size: 0.85rem; margin: 0.15rem 0 0.7rem 0; }
-    .vbar-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; color: #4b5563; margin-bottom: 0.3rem; }
-    .vbar-row span:first-child { width: 34px; }
-    .vbar-row span:last-child { width: 34px; text-align: right; }
-    .vbar-track { flex: 1; height: 7px; border-radius: 999px; background: #eef0f4; overflow: hidden; }
-    .vbar-fill { height: 100%; border-radius: 999px; }
- 
-    .disclaimer {
-        font-size: 0.78rem; color: #9ca3af; text-align: center; margin-top: 1.4rem; line-height: 1.4;
-    }
-    </style>
- 
-    <div class="hero">
-        <div class="hero-icon">🛡️</div>
-        <div class="hero-text">
-            <h1>Verifiko</h1>
-            <p>Zbulues i lajmeve të rreme në shqip — prototip praktik i punimit të diplomës
-            "Evaluating Bias and Fairness of Multilingual Models on Albanian Fake News".</p>
-        </div>
-    </div>
-    <div class="pill-row">
-        <span class="pill">🎯 95.5% saktësi</span>
-        <span class="pill">🤖 2 modele AI</span>
-        <span class="pill">🇦🇱 Shqip · 🇬🇧 Anglisht</span>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
- 
-tab_analyze, tab_findings = st.tabs(["🔍  Analizo", "📊  Gjetjet"])
+GEMINI_MODEL_CANDIDATES = ["gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-flash-lite-latest"]
  
 # ---------------------------------------------------------------------------
-# MODEL LOADING / PREDIKIMI
+# GEMINI - "AI ruling" mbi rezultatin e klasifikuesit
+# ---------------------------------------------------------------------------
+def _get_gemini_key():
+    try:
+        return st.secrets.get("GEMINI_API_KEY", "")
+    except Exception:
+        return ""
+ 
+ 
+def _extract_json(raw_text: str):
+    """Gemini nganjehere e mbeshtjell JSON-in me ```json ... ``` - e pastrojme."""
+    cleaned = raw_text.strip()
+    cleaned = re.sub(r"^```(json)?", "", cleaned).strip()
+    cleaned = re.sub(r"```$", "", cleaned).strip()
+    return json.loads(cleaned)
+ 
+ 
+def gemini_ruling(article_text: str, label: str, confidence: float) -> dict:
+    """Thirr Gemini per te prodhuar Reliability/Consensus/Impact + tekstin e
+    analizes, gjetjeve kryesore, komenteve te 'debatit', dhe verdiktit final.
+    Kthen nje dict me vlera default nese Gemini s'eshte i konfiguruar ose deshton."""
+    fallback = {
+        "reliability_score": 50,
+        "consensus_score": 50,
+        "impact_score": 50,
+        "analysis_summary": "Analiza e detajuar me AI s'është e disponueshme (mungon çelësi Gemini te 'Secrets').",
+        "key_findings": [
+            {"tag": "Logjika", "text": "Aktivizo Gemini API te Secrets për gjetje të detajuara."},
+            {"tag": "Ekzagjerim", "text": "—"},
+            {"tag": "Evidencë", "text": "—"},
+        ],
+        "debate_supportive": {"author": "Lexuesi A", "text": "—"},
+        "debate_critical": {"author": "Lexuesi B", "text": "—"},
+        "verdict": "Vlerësimi bazohet vetëm te modeli klasifikues (shih Truth Score).",
+    }
+ 
+    api_key = _get_gemini_key()
+    if not api_key:
+        return fallback
+ 
+    prompt = f"""Je një asistent i verifikimit të fakteve për një aplikacion demo diplome në shqip
+("Verifiko"). Modeli i mësimit të makinës ka klasifikuar tekstin e mëposhtëm si "{label}"
+me {confidence*100:.1f}% siguri. Analizo vetë tekstin dhe kthe VETËM një objekt JSON (asnjë
+tekst tjetër, pa ```), me këtë strukturë të saktë:
+ 
+{{
+  "reliability_score": <numër 0-100, sa i besueshëm duket burimi/stili i shkrimit>,
+  "consensus_score": <numër 0-100, sa përputhet pretendimi me atë çka dihet/raportohet zakonisht>,
+  "impact_score": <numër 0-100, sa i rrezikshëm/dëmshëm do të ishte nëse besohej dhe ky pretendim është i rremë>,
+  "analysis_summary": "<2-3 fjali shqip, përmbledhje objektive e analizës>",
+  "key_findings": [
+    {{"tag": "Logjika", "text": "<1 fjali>"}},
+    {{"tag": "Ekzagjerim", "text": "<1 fjali>"}},
+    {{"tag": "Evidencë", "text": "<1 fjali>"}}
+  ],
+  "debate_supportive": {{"author": "<emër i shpikur>", "text": "<1-2 fjali që mbrojnë/besojnë lajmin>"}},
+  "debate_critical": {{"author": "<emër i shpikur>", "text": "<1-2 fjali skeptike ndaj lajmit>"}},
+  "verdict": "<1 paragraf shqip, në stil 'vendimi final i gjyqit', objektiv, bazuar në logjikë>"
+}}
+ 
+Teksti i lajmit:
+\"\"\"{article_text[:4000]}\"\"\"
+"""
+ 
+    for model_name in GEMINI_MODEL_CANDIDATES:
+        try:
+            resp = requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
+                params={"key": api_key},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"responseMimeType": "application/json", "temperature": 0.4},
+                },
+                timeout=25,
+            )
+            if resp.status_code != 200:
+                continue
+            data = resp.json()
+            raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+            parsed = _extract_json(raw_text)
+            for key, default in fallback.items():
+                parsed.setdefault(key, default)
+            return parsed
+        except Exception:
+            continue
+    return fallback
+ 
+ 
+# ---------------------------------------------------------------------------
+# MODELI KLASIFIKUES
 # ---------------------------------------------------------------------------
 @st.cache_resource(show_spinner="Duke ngarkuar modelin...")
 def load_model(model_path: str):
@@ -253,32 +212,247 @@ def fetch_article_text(url: str) -> str:
     return extracted.strip()
  
  
-def render_result(label, confidence, all_probs, model_name):
-    is_fake = label == "FAKE"
-    accent = "#dc2626" if is_fake else "#16a34a"
-    accent_soft = "#fef2f2" if is_fake else "#f0fdf4"
-    accent_border = "#fecaca" if is_fake else "#bbf7d0"
-    icon = "⚠️" if is_fake else "✅"
-    verdict_text = "LAJM I RREMË" if is_fake else "LAJM I BESUESHËM"
-    pct = confidence * 100
-    deg = pct * 3.6
+# ---------------------------------------------------------------------------
+# UI SETUP - TEMA E ERRET
+# ---------------------------------------------------------------------------
+st.set_page_config(page_title="Verifiko — Zbulues i Lajmeve të Rreme", page_icon="🛡️", layout="centered")
+ 
+st.markdown(
+    """
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+ 
+    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+    .stApp { background: #0b0b12; }
+    #MainMenu { visibility: hidden; }
+    footer { visibility: hidden; }
+    [data-testid="stHeader"] { background: transparent; }
+    [data-testid="stToolbar"] { display: none; }
+    .block-container { padding-top: 1.6rem; max-width: 760px; }
+ 
+    h1, h2, h3, p, span, label, div { color: #e8e8ef; }
+ 
+    .hero {
+        display: flex; align-items: center; gap: 1rem;
+        padding: 1.7rem 1.7rem; border-radius: 24px; margin-bottom: 1.1rem;
+        background: linear-gradient(135deg, #6d28d9 0%, #5b21b6 55%, #2e1065 100%);
+        box-shadow: 0 16px 40px rgba(0,0,0,0.45);
+    }
+    .hero-icon {
+        flex-shrink: 0; width: 56px; height: 56px; border-radius: 16px;
+        background: rgba(255,255,255,0.16); display: flex; align-items: center;
+        justify-content: center; font-size: 1.8rem;
+        border: 1px solid rgba(255,255,255,0.25);
+    }
+    .hero-text h1 {
+        font-family: 'Poppins', sans-serif; margin: 0; font-size: 1.55rem;
+        font-weight: 800; color: #ffffff !important; letter-spacing: -0.3px;
+    }
+    .hero-text p { margin: 0.3rem 0 0 0; color: rgba(255,255,255,0.85) !important; font-size: 0.92rem; line-height: 1.4; }
+ 
+    .pill-row { display: flex; gap: 0.5rem; margin-bottom: 1.4rem; flex-wrap: wrap; }
+    .pill {
+        display: inline-flex; align-items: center; gap: 0.35rem;
+        padding: 0.4rem 0.9rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600;
+        background: rgba(124,58,237,0.18); color: #c4b5fd !important; border: 1px solid rgba(124,58,237,0.35);
+    }
+ 
+    .app-card {
+        background: #17171f; border: 1px solid #26262f; border-radius: 20px;
+        padding: 1.3rem 1.4rem; margin-bottom: 1rem; box-shadow: 0 4px 18px rgba(0,0,0,0.25);
+    }
+    .app-card-title {
+        font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 1rem;
+        color: #f4f4f7 !important; margin-bottom: 0.7rem; display: flex; align-items: center; gap: 0.45rem;
+    }
+ 
+    div[role="radiogroup"] { gap: 0.5rem; }
+ 
+    .stButton > button {
+        border-radius: 12px !important; font-weight: 600 !important; border: 1px solid #2e2e3a !important;
+        background: #1e1e28 !important; color: #d4d4dc !important;
+    }
+    .stButton > button:hover { border-color: #7c3aed !important; color: #c4b5fd !important; }
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #7c3aed, #5b21b6) !important;
+        color: #ffffff !important; border: none !important;
+        box-shadow: 0 8px 20px rgba(91,33,182,0.45) !important;
+    }
+    .stButton > button[kind="primary"]:hover { filter: brightness(1.1); color: #ffffff !important; }
+ 
+    [data-baseweb="tab-list"] { gap: 0.4rem; background: #17171f; padding: 0.35rem; border-radius: 14px; }
+    [data-baseweb="tab"] { border-radius: 10px !important; font-weight: 600; color: #9ca3af !important; }
+    [aria-selected="true"][data-baseweb="tab"] {
+        background: #2a2a38 !important; color: #c4b5fd !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    }
+ 
+    textarea, input { background: #101018 !important; color: #e8e8ef !important; border-color: #2e2e3a !important; }
+ 
+    /* ---------- 4 GAUGE SCORE CARDS ---------- */
+    .score-row { display: flex; gap: 0.7rem; margin: 0.8rem 0 1rem 0; flex-wrap: wrap; }
+    .score-card {
+        flex: 1; min-width: 140px; background: #1c1c26; border: 1px solid #292935;
+        border-radius: 16px; padding: 0.9rem 0.7rem; text-align: center;
+    }
+    .score-card-label { font-size: 0.78rem; color: #9ca3af !important; font-weight: 600; margin-bottom: 0.15rem; }
+    .score-card-sub { font-size: 0.68rem; color: #6b7280 !important; margin-bottom: 0.6rem; min-height: 1.4em; }
+    .score-gauge {
+        width: 68px; height: 68px; border-radius: 50%; margin: 0 auto;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .score-gauge-inner {
+        width: 54px; height: 54px; border-radius: 50%; background: #1c1c26;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 800; font-size: 0.95rem; font-family: 'Poppins', sans-serif;
+    }
+ 
+    /* ---------- KEY FINDINGS ---------- */
+    .finding-card {
+        background: #1c1c26; border: 1px solid #292935; border-radius: 14px;
+        padding: 0.8rem 1rem; margin-bottom: 0.6rem;
+    }
+    .finding-tag {
+        display: inline-block; font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+        color: #c4b5fd !important; background: rgba(124,58,237,0.18); padding: 0.15rem 0.6rem;
+        border-radius: 999px; margin-bottom: 0.4rem; letter-spacing: 0.03em;
+    }
+    .finding-text { color: #d4d4dc !important; font-size: 0.9rem; line-height: 1.4; }
+ 
+    /* ---------- DEBATE COMMENTS ---------- */
+    .debate-bubble {
+        border-radius: 14px; padding: 0.8rem 1rem; margin-bottom: 0.6rem; border: 1px solid;
+    }
+    .debate-bubble.supportive { background: rgba(59,130,246,0.10); border-color: rgba(59,130,246,0.35); }
+    .debate-bubble.critical { background: rgba(239,68,68,0.10); border-color: rgba(239,68,68,0.35); }
+    .debate-author { font-weight: 700; font-size: 0.82rem; margin-bottom: 0.2rem; }
+    .debate-bubble.supportive .debate-author { color: #93c5fd !important; }
+    .debate-bubble.critical .debate-author { color: #fca5a5 !important; }
+    .debate-text { color: #d4d4dc !important; font-size: 0.88rem; line-height: 1.4; }
+ 
+    /* ---------- VERDICT CARD ---------- */
+    .final-verdict-card {
+        background: linear-gradient(135deg, rgba(124,58,237,0.18), rgba(91,33,182,0.10));
+        border: 1px solid rgba(124,58,237,0.35); border-radius: 18px;
+        padding: 1.2rem 1.3rem; margin-top: 0.4rem;
+    }
+    .final-verdict-title {
+        font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 1rem;
+        color: #c4b5fd !important; margin-bottom: 0.6rem;
+    }
+    .final-verdict-text { color: #e8e8ef !important; font-size: 0.92rem; line-height: 1.55; }
+ 
+    .disclaimer {
+        font-size: 0.78rem; color: #6b7280 !important; text-align: center; margin-top: 1.4rem; line-height: 1.4;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+ 
+ 
+def gauge_color(pct: float, invert: bool = False) -> str:
+    """E kuqe per rrezik/pasiguri te larte, jeshile per mire. invert=True per
+    metrika ku numer i larte = keq (p.sh. Impact)."""
+    v = (100 - pct) if invert else pct
+    if v >= 70:
+        return "#22c55e"
+    if v >= 40:
+        return "#f59e0b"
+    return "#ef4444"
+ 
+ 
+def score_card(label: str, sub: str, pct: float, invert: bool = False):
+    color = gauge_color(pct, invert=invert)
+    deg = max(0, min(100, pct)) * 3.6
     st.markdown(
         f"""
-        <div class="verdict-card" style="background:{accent_soft}; border-color:{accent_border};">
-            <div class="verdict-gauge" style="background: conic-gradient({accent} {deg}deg, #e5e7eb 0deg);">
-                <div class="verdict-gauge-inner" style="color:{accent};">{pct:.0f}%</div>
-            </div>
-            <div style="flex:1;">
-                <div class="verdict-label" style="color:{accent};">{icon} {verdict_text}</div>
-                <div class="verdict-sub">Siguria e modelit {model_name} · {pct:.1f}%</div>
-                <div class="vbar-row"><span>Real</span><div class="vbar-track"><div class="vbar-fill" style="width:{all_probs[0]*100:.1f}%; background:#16a34a;"></div></div><span>{all_probs[0]*100:.0f}%</span></div>
-                <div class="vbar-row"><span>Fake</span><div class="vbar-track"><div class="vbar-fill" style="width:{all_probs[1]*100:.1f}%; background:#dc2626;"></div></div><span>{all_probs[1]*100:.0f}%</span></div>
+        <div class="score-card">
+            <div class="score-card-label">{label}</div>
+            <div class="score-card-sub">{sub}</div>
+            <div class="score-gauge" style="background: conic-gradient({color} {deg}deg, #2a2a38 0deg);">
+                <div class="score-gauge-inner" style="color:{color};">{pct:.0f}%</div>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
  
+ 
+# ---------------------------------------------------------------------------
+# ONBOARDING (shfaqet 1 here per sesion)
+# ---------------------------------------------------------------------------
+ONBOARDING_SLIDES = [
+    ("🕵️", "Zbulo Bias-in dhe Axhendat e Fshehura",
+     "Verifiko analizon gjuhën dhe tonin e artikullit për sinjale anësie apo manipulimi."),
+    ("🧠", "Analiza me Inteligjencë Artificiale",
+     "Modeli XLM-R (95.5% saktësi) klasifikon tekstin, ndërsa Gemini shpjegon logjikën pas rezultatit."),
+    ("⚖️", "Pikëpamje e Balancuar",
+     "Shiko argumentet mbështetëse dhe kritike krah për krah, para se të nxjerrësh përfundimin tënd."),
+    ("🔨", "Vendimi Final",
+     "Merr një 'verdikt' objektiv, bazuar në logjikë dhe evidencë — jo emocion."),
+]
+ 
+if "onboarded" not in st.session_state:
+    st.session_state["onboarded"] = False
+if "onb_step" not in st.session_state:
+    st.session_state["onb_step"] = 0
+ 
+if not st.session_state["onboarded"]:
+    step = st.session_state["onb_step"]
+    icon, title, desc = ONBOARDING_SLIDES[step]
+    st.markdown(
+        f"""
+        <div class="hero" style="flex-direction: column; text-align: center; padding: 2.6rem 1.6rem;">
+            <div class="hero-icon" style="font-size: 2.6rem; width: 84px; height: 84px; margin-bottom: 1rem;">{icon}</div>
+            <div class="hero-text">
+                <h1 style="font-size: 1.5rem;">{title}</h1>
+                <p style="font-size: 1rem; margin-top: 0.6rem;">{desc}</p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    dots = " ".join("●" if i == step else "○" for i in range(len(ONBOARDING_SLIDES)))
+    st.markdown(f"<p style='text-align:center; color:#7c3aed; letter-spacing:0.3em;'>{dots}</p>", unsafe_allow_html=True)
+ 
+    c1, c2 = st.columns([1, 1])
+    if step < len(ONBOARDING_SLIDES) - 1:
+        if c1.button("Kapërce", use_container_width=True):
+            st.session_state["onboarded"] = True
+            st.rerun()
+        if c2.button("Tjetra →", type="primary", use_container_width=True):
+            st.session_state["onb_step"] += 1
+            st.rerun()
+    else:
+        if c2.button("Fillo ✓", type="primary", use_container_width=True):
+            st.session_state["onboarded"] = True
+            st.rerun()
+    st.stop()
+ 
+# ---------------------------------------------------------------------------
+# HERO (pas onboarding)
+# ---------------------------------------------------------------------------
+st.markdown(
+    """
+    <div class="hero">
+        <div class="hero-icon">🛡️</div>
+        <div class="hero-text">
+            <h1>Verifiko</h1>
+            <p>Zbulues i lajmeve të rreme në shqip — prototip praktik i punimit të diplomës
+            "Evaluating Bias and Fairness of Multilingual Models on Albanian Fake News".</p>
+        </div>
+    </div>
+    <div class="pill-row">
+        <span class="pill">🎯 95.5% saktësi</span>
+        <span class="pill">🤖 XLM-R + Gemini</span>
+        <span class="pill">🇦🇱 Shqip · 🇬🇧 Anglisht</span>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+ 
+tab_analyze, tab_findings = st.tabs(["🔍  Analizo", "📊  Gjetjet e Kërkimit"])
  
 # ---------------------------------------------------------------------------
 # TAB 1: ANALIZO
@@ -336,29 +510,87 @@ with tab_analyze:
             height=170,
         )
  
-    col1, col2 = st.columns([1, 1])
-    analyze = col1.button("🔍 Analizo", type="primary", use_container_width=True)
-    compare = col2.button("⚖️ Krahaso modelet", use_container_width=True)
+    analyze = st.button("🔍 Analizo", type="primary", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
  
-    if analyze or compare:
+    if analyze:
         if not text.strip():
             st.warning("Fut një tekst para se të analizosh.")
-        elif compare:
-            st.markdown('<div class="app-card-title">⚖️ Rezultati i krahasimit</div>', unsafe_allow_html=True)
-            c1, c2 = st.columns(2)
-            for col, (name, info) in zip((c1, c2), MODELS.items()):
-                with col:
-                    try:
-                        label, confidence, all_probs = predict(text, info["path"])
-                        render_result(label, confidence, all_probs, name)
-                    except OSError:
-                        st.error(f"S'u gjet modeli `{info['path']}`.")
         else:
             model_path = MODELS[model_choice]["path"]
             try:
                 label, confidence, all_probs = predict(text, model_path)
-                render_result(label, confidence, all_probs, model_choice)
+                truth_pct = all_probs[0] * 100  # probabiliteti REAL = "Truth Score"
+ 
+                with st.spinner("Duke analizuar me AI..."):
+                    ruling = gemini_ruling(text, label, confidence)
+ 
+                result_tab_analysis, result_tab_verdict = st.tabs(["📋 Analiza", "⚖️ Verdikti"])
+ 
+                with result_tab_analysis:
+                    st.markdown('<div class="score-row">', unsafe_allow_html=True)
+                    cols = st.columns(4)
+                    with cols[0]:
+                        score_card("Truth Score", f"Modeli {model_choice}", truth_pct)
+                    with cols[1]:
+                        score_card("Besueshmëria", "Stili/toni", float(ruling.get("reliability_score", 50)))
+                    with cols[2]:
+                        score_card("Konsensusi", "Vs. raportime tjera", float(ruling.get("consensus_score", 50)))
+                    with cols[3]:
+                        score_card("Ndikimi", "Rrezik nëse i rremë", float(ruling.get("impact_score", 50)), invert=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+ 
+                    st.markdown('<div class="app-card">', unsafe_allow_html=True)
+                    st.markdown('<div class="app-card-title">📄 Përmbledhje e Analizës</div>', unsafe_allow_html=True)
+                    st.markdown(f'<p class="finding-text">{ruling.get("analysis_summary", "")}</p>', unsafe_allow_html=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+ 
+                    st.markdown('<div class="app-card">', unsafe_allow_html=True)
+                    st.markdown('<div class="app-card-title">🔑 Gjetjet Kryesore</div>', unsafe_allow_html=True)
+                    for finding in ruling.get("key_findings", []):
+                        st.markdown(
+                            f"""<div class="finding-card">
+                                <span class="finding-tag">{finding.get('tag','')}</span>
+                                <div class="finding-text">{finding.get('text','')}</div>
+                            </div>""",
+                            unsafe_allow_html=True,
+                        )
+                    st.markdown('</div>', unsafe_allow_html=True)
+ 
+                    st.markdown('<div class="app-card">', unsafe_allow_html=True)
+                    st.markdown('<div class="app-card-title">💬 Debati</div>', unsafe_allow_html=True)
+                    sup = ruling.get("debate_supportive", {})
+                    crit = ruling.get("debate_critical", {})
+                    st.markdown(
+                        f"""<div class="debate-bubble supportive">
+                            <div class="debate-author">{sup.get('author','')} · Mbështetës</div>
+                            <div class="debate-text">{sup.get('text','')}</div>
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(
+                        f"""<div class="debate-bubble critical">
+                            <div class="debate-author">{crit.get('author','')} · Kritik</div>
+                            <div class="debate-text">{crit.get('text','')}</div>
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown('</div>', unsafe_allow_html=True)
+ 
+                with result_tab_verdict:
+                    icon = "⚠️" if label == "FAKE" else "✅"
+                    verdict_label = "LAJM I RREMË" if label == "FAKE" else "LAJM I BESUESHËM"
+                    st.markdown(
+                        f"""
+                        <div class="final-verdict-card">
+                            <div class="final-verdict-title">{icon} {verdict_label} — Truth Score {truth_pct:.0f}%</div>
+                            <div class="final-verdict-text">{ruling.get("verdict", "")}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    st.caption(f"Klasifikuesi {model_choice}: {label} me {confidence*100:.1f}% siguri.")
+ 
             except OSError:
                 st.error(
                     f"S'u gjet modeli te `{model_path}`. Kontrollo variablën MODELS "
@@ -367,12 +599,13 @@ with tab_analyze:
  
     st.markdown(
         '<p class="disclaimer">Kujdes: ky është një prototip akademik për demonstrim, jo një mjet '
-        'i verifikuar për përdorim në prodhim. Rezultatet duhen interpretuar me kujdes.</p>',
+        'i verifikuar për përdorim në prodhim. Rezultatet (përfshi ato të gjeneruara nga AI) '
+        'duhen interpretuar me kujdes.</p>',
         unsafe_allow_html=True,
     )
  
 # ---------------------------------------------------------------------------
-# TAB 2: GJETJET E KERKIMIT
+# TAB 2: GJETJET E KERKIMIT (permbajtje akademike, e paprekur)
 # ---------------------------------------------------------------------------
 with tab_findings:
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
@@ -415,5 +648,4 @@ with tab_findings:
     )
     st.info("Për detaje të plota metodologjike, shih Kreun III–IV të punimit të diplomës.")
     st.markdown('</div>', unsafe_allow_html=True)
- 
  
