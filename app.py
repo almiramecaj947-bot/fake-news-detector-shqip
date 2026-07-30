@@ -1,10 +1,11 @@
 """
-Verifiko - Zbulues i Lajmeve te Rreme (Fake News Detector)
+Verify Albanian News (Verifiko) - Zbulues i Lajmeve te Rreme
 Almira Mecaj, Diplome ML - "Evaluating Bias and Fairness of Multilingual
 Models on Albanian Fake News"
 
-v9: dizajn i pastruar (pa emoji dekorative, pa onboarding), stil minimal si
-referenca - vetem ikona te qarta SVG brenda gaugeve te rezultatit.
+v10: menu fillestar (Analize e Detajuar / Verifikimi AI - chat), riorganizim
+i faqes se analizes per te ndjekur nga afer nje app reference (headline +
+scores direkt, gjetje, debat, verdikt me pjesemarres/rast/fakte te verifikuara).
 """
 
 import json
@@ -17,6 +18,8 @@ import streamlit as st
 import torch
 import trafilatura
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
+
+APP_TITLE = "Verify Albanian News"
 
 # ---------------------------------------------------------------------------
 # PWA HEAD TAGS
@@ -89,8 +92,9 @@ EXAMPLES = {
 
 GEMINI_MODEL_CANDIDATES = ["gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-flash-lite-latest"]
 
+
 # ---------------------------------------------------------------------------
-# GEMINI - "AI ruling" mbi rezultatin e klasifikuesit
+# GEMINI HELPERS
 # ---------------------------------------------------------------------------
 def _get_gemini_key():
     try:
@@ -104,6 +108,31 @@ def _extract_json(raw_text: str):
     cleaned = re.sub(r"^```(json)?", "", cleaned).strip()
     cleaned = re.sub(r"```$", "", cleaned).strip()
     return json.loads(cleaned)
+
+
+def _gemini_generate(contents, response_json=True, temperature=0.4):
+    """Thirrje e pergjithshme Gemini. contents = lista Gemini-style [{'role':.., 'parts':[{'text':..}]}]."""
+    api_key = _get_gemini_key()
+    if not api_key:
+        return None
+    gen_config = {"temperature": temperature}
+    if response_json:
+        gen_config["responseMimeType"] = "application/json"
+    for model_name in GEMINI_MODEL_CANDIDATES:
+        try:
+            resp = requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
+                params={"key": api_key},
+                json={"contents": contents, "generationConfig": gen_config},
+                timeout=25,
+            )
+            if resp.status_code != 200:
+                continue
+            data = resp.json()
+            return data["candidates"][0]["content"]["parts"][0]["text"]
+        except Exception:
+            continue
+    return None
 
 
 def gemini_ruling(article_text: str, label: str, confidence: float) -> dict:
@@ -120,18 +149,16 @@ def gemini_ruling(article_text: str, label: str, confidence: float) -> dict:
         "debate_supportive": {"author": "Lexuesi A", "text": "—"},
         "debate_critical": {"author": "Lexuesi B", "text": "—"},
         "verdict": "Vlerësimi bazohet vetëm te modeli klasifikues (shih Truth Score).",
+        "headline": article_text.strip().split("\n")[0][:90],
     }
 
-    api_key = _get_gemini_key()
-    if not api_key:
-        return fallback
-
     prompt = f"""Je një asistent i verifikimit të fakteve për një aplikacion demo diplome në shqip
-("Verifiko"). Modeli i mësimit të makinës ka klasifikuar tekstin e mëposhtëm si "{label}"
+("{APP_TITLE}"). Modeli i mësimit të makinës ka klasifikuar tekstin e mëposhtëm si "{label}"
 me {confidence*100:.1f}% siguri. Analizo vetë tekstin dhe kthe VETËM një objekt JSON (asnjë
 tekst tjetër, pa ```), me këtë strukturë të saktë:
 
 {{
+  "headline": "<titull i shkurtër (max 12 fjalë) që përmbledh temën e lajmit, në shqip>",
   "reliability_score": <numër 0-100, sa i besueshëm duket burimi/stili i shkrimit>,
   "consensus_score": <numër 0-100, sa përputhet pretendimi me atë çka dihet/raportohet zakonisht>,
   "impact_score": <numër 0-100, sa i rrezikshëm/dëmshëm do të ishte nëse besohej dhe ky pretendim është i rremë>,
@@ -149,29 +176,37 @@ tekst tjetër, pa ```), me këtë strukturë të saktë:
 Teksti i lajmit:
 \"\"\"{article_text[:4000]}\"\"\"
 """
+    raw_text = _gemini_generate([{"parts": [{"text": prompt}]}], response_json=True)
+    if raw_text is None:
+        return fallback
+    try:
+        parsed = _extract_json(raw_text)
+        for key, default in fallback.items():
+            parsed.setdefault(key, default)
+        return parsed
+    except Exception:
+        return fallback
 
-    for model_name in GEMINI_MODEL_CANDIDATES:
-        try:
-            resp = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
-                params={"key": api_key},
-                json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"responseMimeType": "application/json", "temperature": 0.4},
-                },
-                timeout=25,
-            )
-            if resp.status_code != 200:
-                continue
-            data = resp.json()
-            raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-            parsed = _extract_json(raw_text)
-            for key, default in fallback.items():
-                parsed.setdefault(key, default)
-            return parsed
-        except Exception:
-            continue
-    return fallback
+
+def gemini_chat_reply(history: list) -> str:
+    """history = lista [{'role': 'user'|'assistant', 'text': ...}, ...]"""
+    system_note = (
+        "Je 'Verifikimi AI', asistenti bisedues i aplikacionit Verify Albanian News. "
+        "Përgjigju gjithmonë në shqip, shkurt dhe qartë. Kur dikush të japë një lajm ose "
+        "pretendim, vlerëso besueshmërinë e tij si do ta bënte një gazetar/fact-checker "
+        "profesionist: shqyrto logjikën, ekzagjerimin, dhe evidencën e mundshme. Nëse pyetja "
+        "s'ka lidhje me lajme/fakte, përgjigju normalisht por kthehu te roli yt kryesor."
+    )
+    contents = [{"role": "user", "parts": [{"text": system_note}]},
+                {"role": "model", "parts": [{"text": "Kuptova. Jam gati të ndihmoj me verifikimin e lajmeve."}]}]
+    for turn in history:
+        role = "user" if turn["role"] == "user" else "model"
+        contents.append({"role": role, "parts": [{"text": turn["text"]}]})
+
+    reply = _gemini_generate(contents, response_json=False, temperature=0.6)
+    if reply is None:
+        return "Kërkohet çelësi Gemini (te 'Secrets' në Streamlit) që Verifikimi AI të përgjigjet."
+    return reply
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +241,7 @@ def fetch_article_text(url: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# SVG IKONA TE PASTRA (jo emoji) - per gaugat e rezultatit
+# SVG IKONA
 # ---------------------------------------------------------------------------
 ICON_CHECK = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 <path d="M9 12.5L11 14.5L15.5 9.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -224,11 +259,21 @@ ICON_PEOPLE = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xml
 ICON_BOLT = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 <path d="M13 3L5 13.5H11L10.5 21L19 9.5H13L13 3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>"""
 
+ICON_CHAT = """<svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M4 12C4 7.58 7.58 4 12 4C16.42 4 20 7.58 20 12C20 16.42 16.42 20 12 20C10.6 20 9.28 19.64 8.13 19L4 20L5.13 16.35C4.42 15.13 4 13.62 4 12Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>"""
+
+ICON_ANALYSIS = """<svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" stroke-width="2"/>
+<path d="M8 14L11 11L13 13L16 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>"""
+
+ICON_SCALE = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 3V21M6 6H18M6 6L3 12H9L6 6ZM18 6L15 12H21L18 6Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>"""
+
 
 # ---------------------------------------------------------------------------
 # UI SETUP - TEMA E ERRET, MINIMALE
 # ---------------------------------------------------------------------------
-st.set_page_config(page_title="Verifiko — Zbulues i Lajmeve të Rreme", page_icon="🛡️", layout="centered")
+st.set_page_config(page_title=APP_TITLE, page_icon="🛡️", layout="centered")
 
 st.markdown(
     """
@@ -241,21 +286,22 @@ st.markdown(
     footer { visibility: hidden; }
     [data-testid="stHeader"] { background: transparent; }
     [data-testid="stToolbar"] { display: none; }
-    .block-container { padding-top: 2.2rem; max-width: 720px; }
+    .block-container { padding-top: 2rem; max-width: 720px; }
 
     h1, h2, h3, p, span, label, div { color: #ececf1; }
 
-    /* ---------- TITULLI ---------- */
-    .app-title { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.4px; margin-bottom: 0.15rem; }
-    .app-subtitle { font-size: 0.9rem; color: #8b8b96 !important; margin-bottom: 1.6rem; line-height: 1.4; }
+    .app-title { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.4px; margin-bottom: 0.15rem; }
+    .app-subtitle { font-size: 0.88rem; color: #8b8b96 !important; margin-bottom: 1.4rem; line-height: 1.4; }
+    .headline-text { font-size: 1.3rem; font-weight: 800; line-height: 1.35; margin: 0.3rem 0 1.1rem 0; }
 
-    /* ---------- KARTA E THJESHTE ---------- */
     .app-card {
         background: #16161c; border: 1px solid #222229; border-radius: 18px;
         padding: 1.2rem 1.3rem; margin-bottom: 1rem;
     }
-    .app-card-title {
-        font-weight: 700; font-size: 0.95rem; color: #ececf1 !important; margin-bottom: 0.7rem;
+    .app-card-title { font-weight: 700; font-size: 0.95rem; color: #ececf1 !important; margin-bottom: 0.7rem; }
+    .section-label {
+        font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em;
+        color: #6d6d78 !important; margin: 1.1rem 0 0.6rem 0;
     }
 
     div[role="radiogroup"] { gap: 0.5rem; }
@@ -266,61 +312,53 @@ st.markdown(
         background: #1b1b22 !important; color: #c9c9d2 !important;
     }
     .stButton > button:hover { border-color: #6d5bd0 !important; color: #ffffff !important; }
-    .stButton > button[kind="primary"] {
-        background: #6d5bd0 !important;
-        color: #ffffff !important; border: none !important;
-    }
+    .stButton > button[kind="primary"] { background: #6d5bd0 !important; color: #ffffff !important; border: none !important; }
     .stButton > button[kind="primary"]:hover { background: #7c6bdb !important; color: #ffffff !important; }
-    .stButton > button:disabled {
-        background: #1b1b22 !important; color: #4b4b54 !important; border: 1px solid #222229 !important;
-    }
+    .stButton > button:disabled { background: #1b1b22 !important; color: #4b4b54 !important; border: 1px solid #222229 !important; }
 
     [data-baseweb="tab-list"] { gap: 0.3rem; background: transparent; border-bottom: 1px solid #222229; }
     [data-baseweb="tab"] { border-radius: 0 !important; font-weight: 600; color: #8b8b96 !important; }
-    [aria-selected="true"][data-baseweb="tab"] {
-        color: #ffffff !important; border-bottom: 2px solid #6d5bd0 !important;
-    }
+    [aria-selected="true"][data-baseweb="tab"] { color: #ffffff !important; border-bottom: 2px solid #6d5bd0 !important; }
 
     textarea, input { background: #101014 !important; color: #ececf1 !important; border-color: #26262f !important; border-radius: 12px !important; }
 
-    /* ---------- CHIP SUGJERIMESH ---------- */
-    .chip-row { display: flex; gap: 0.5rem; margin-bottom: 0.7rem; flex-wrap: wrap; }
+    [data-testid="stExpander"] { background: #16161c !important; border: 1px solid #222229 !important; border-radius: 14px !important; }
+
+    /* ---------- MENU FILLESTAR ---------- */
+    .menu-card {
+        background: #16161c; border: 1px solid #222229; border-radius: 20px;
+        padding: 1.5rem 1.4rem; margin-bottom: 1rem; display: flex; gap: 1rem; align-items: center;
+        cursor: pointer;
+    }
+    .menu-icon {
+        flex-shrink: 0; width: 52px; height: 52px; border-radius: 14px; background: rgba(109,91,208,0.16);
+        color: #a99bf0; display: flex; align-items: center; justify-content: center;
+    }
+    .menu-title { font-weight: 700; font-size: 1.05rem; margin-bottom: 0.2rem; }
+    .menu-desc { font-size: 0.82rem; color: #8b8b96 !important; line-height: 1.4; }
 
     /* ---------- 4 GAUGE SCORE CARDS ---------- */
     .score-row { display: flex; gap: 0.6rem; margin: 0.2rem 0 1rem 0; }
-    .score-card {
-        flex: 1; background: #16161c; border: 1px solid #222229;
-        border-radius: 16px; padding: 0.85rem 0.4rem; text-align: center;
-    }
+    .score-card { flex: 1; background: #16161c; border: 1px solid #222229; border-radius: 16px; padding: 0.85rem 0.4rem; text-align: center; }
     .score-card-label { font-size: 0.72rem; color: #9b9ba6 !important; font-weight: 600; margin-bottom: 0.6rem; }
-    .score-gauge {
-        width: 60px; height: 60px; border-radius: 50%; margin: 0 auto;
-        display: flex; align-items: center; justify-content: center;
-    }
-    .score-gauge-inner {
-        width: 48px; height: 48px; border-radius: 50%; background: #16161c;
-        display: flex; align-items: center; justify-content: center;
-    }
+    .score-gauge { width: 60px; height: 60px; border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center; }
+    .score-gauge-inner { width: 48px; height: 48px; border-radius: 50%; background: #16161c; display: flex; align-items: center; justify-content: center; }
 
-    /* ---------- KEY FINDINGS ---------- */
-    .finding-card {
-        background: #16161c; border: 1px solid #222229; border-radius: 14px;
-        padding: 0.75rem 1rem; margin-bottom: 0.5rem;
-    }
+    /* ---------- KEY FINDINGS / VERIFIED FACTS ---------- */
+    .finding-card { background: #16161c; border: 1px solid #222229; border-radius: 14px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; }
     .finding-tag {
         display: inline-block; font-size: 0.66rem; font-weight: 700; text-transform: uppercase;
         color: #a99bf0 !important; background: rgba(109,91,208,0.16); padding: 0.12rem 0.55rem;
         border-radius: 999px; margin-bottom: 0.35rem; letter-spacing: 0.03em;
     }
     .finding-text { color: #d0d0d8 !important; font-size: 0.88rem; line-height: 1.4; }
+    .fact-row { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.55rem 0; border-bottom: 1px solid #1e1e26; }
+    .fact-row:last-child { border-bottom: none; }
+    .fact-check { flex-shrink: 0; color: #22c55e; margin-top: 0.1rem; }
 
     /* ---------- DEBATE ---------- */
     .debate-row { display: flex; gap: 0.7rem; margin-bottom: 0.7rem; }
-    .debate-avatar {
-        flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%;
-        display: flex; align-items: center; justify-content: center;
-        font-weight: 700; font-size: 0.85rem; color: #ffffff !important;
-    }
+    .debate-avatar { flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; color: #ffffff !important; }
     .debate-bubble { flex: 1; border-radius: 14px; padding: 0.7rem 0.9rem; border: 1px solid; }
     .debate-bubble.supportive { background: rgba(59,130,246,0.08); border-color: rgba(59,130,246,0.25); }
     .debate-bubble.critical { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.25); }
@@ -330,16 +368,14 @@ st.markdown(
     .debate-text { color: #d0d0d8 !important; font-size: 0.86rem; line-height: 1.4; }
 
     /* ---------- VERDICT ---------- */
-    .final-verdict-card {
-        background: #16161c; border: 1px solid rgba(109,91,208,0.4); border-radius: 16px;
-        padding: 1.1rem 1.2rem; margin-top: 0.3rem;
-    }
-    .final-verdict-title { font-weight: 700; font-size: 0.95rem; color: #a99bf0 !important; margin-bottom: 0.6rem; }
+    .final-verdict-card { background: #16161c; border: 1px solid rgba(109,91,208,0.4); border-radius: 16px; padding: 1.1rem 1.2rem; margin-top: 0.3rem; }
+    .final-verdict-title { font-weight: 700; font-size: 0.95rem; color: #a99bf0 !important; margin-bottom: 0.6rem; display: flex; align-items: center; gap: 0.4rem; }
     .final-verdict-text { color: #ececf1 !important; font-size: 0.9rem; line-height: 1.55; }
 
-    .disclaimer {
-        font-size: 0.75rem; color: #55555f !important; text-align: center; margin-top: 1.4rem; line-height: 1.4;
-    }
+    .disclaimer { font-size: 0.75rem; color: #55555f !important; text-align: center; margin-top: 1.4rem; line-height: 1.4; }
+
+    /* ---------- CHAT ---------- */
+    [data-testid="stChatMessage"] { background: #16161c !important; border: 1px solid #222229 !important; border-radius: 14px !important; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -373,33 +409,81 @@ def score_card(label: str, icon_svg: str, pct: float, invert: bool = False):
 
 
 # ---------------------------------------------------------------------------
-# HEADER (thjeshte, pa emoji, pa onboarding)
+# NAVIGIMI - MENU FILLESTAR
 # ---------------------------------------------------------------------------
-st.markdown(
-    """
-    <div class="app-title">Verifiko</div>
-    <div class="app-subtitle">Zbulues i lajmeve të rreme në shqip — analizë me AI e bazuar në modelin
-    XLM-R të diplomës "Evaluating Bias and Fairness of Multilingual Models on Albanian Fake News".</div>
-    """,
-    unsafe_allow_html=True,
-)
+if "page" not in st.session_state:
+    st.session_state["page"] = "menu"
 
-tab_analyze, tab_findings = st.tabs(["Analizo", "Gjetjet e Kërkimit"])
+
+def go_to(page_name):
+    st.session_state["page"] = page_name
+    st.rerun()
+
+
+def top_bar(current_title: str):
+    c1, c2 = st.columns([1, 6])
+    with c1:
+        if st.button("←", key="back_btn"):
+            go_to("menu")
+    with c2:
+        st.markdown(f'<div class="app-title" style="margin-top:0.3rem;">{current_title}</div>', unsafe_allow_html=True)
+
 
 # ---------------------------------------------------------------------------
-# TAB 1: ANALIZO
+# FAQJA: MENU
 # ---------------------------------------------------------------------------
-with tab_analyze:
+if st.session_state["page"] == "menu":
+    st.markdown(
+        f"""
+        <div class="app-title">{APP_TITLE}</div>
+        <div class="app-subtitle">Zbulues i lajmeve të rreme në shqip — prototip praktik i punimit të diplomës
+        "Evaluating Bias and Fairness of Multilingual Models on Albanian Fake News".</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        f"""<div class="menu-card"><div class="menu-icon">{ICON_ANALYSIS}</div>
+        <div><div class="menu-title">Analizë e Detajuar</div>
+        <div class="menu-desc">Ngjit një lajm ose link dhe merr Truth Score, Besueshmëri, Konsensus, Ndikim, gjetje kryesore dhe verdikt final.</div>
+        </div></div>""",
+        unsafe_allow_html=True,
+    )
+    if st.button("Hap Analizën", use_container_width=True, type="primary", key="open_analysis"):
+        go_to("analysis")
+
+    st.markdown(
+        f"""<div class="menu-card"><div class="menu-icon">{ICON_CHAT}</div>
+        <div><div class="menu-title">Verifikimi AI</div>
+        <div class="menu-desc">Bisedë e lirë me AI — pyet për çdo lajm ose pretendim dhe merr përgjigje direkt.</div>
+        </div></div>""",
+        unsafe_allow_html=True,
+    )
+    if st.button("Hap Verifikimin AI", use_container_width=True, key="open_chat"):
+        go_to("chat")
+
+    if st.button("Gjetjet e Kërkimit (Diplomë)", use_container_width=True, key="open_findings"):
+        go_to("findings")
+
+    st.markdown(
+        '<p class="disclaimer">Prototip akademik për demonstrim, jo mjet i verifikuar për prodhim.</p>',
+        unsafe_allow_html=True,
+    )
+
+# ---------------------------------------------------------------------------
+# FAQJA: ANALIZA E DETAJUAR
+# ---------------------------------------------------------------------------
+elif st.session_state["page"] == "analysis":
+    top_bar("Analizë e Detajuar")
+
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
     st.markdown('<div class="app-card-title">Modeli</div>', unsafe_allow_html=True)
-    model_choice = st.radio(
-        "Zgjidh modelin", list(MODELS.keys()), horizontal=True, label_visibility="collapsed",
-    )
+    model_choice = st.radio("Zgjidh modelin", list(MODELS.keys()), horizontal=True, label_visibility="collapsed")
     st.caption(f"{MODELS[model_choice]['description']} · saktësi few-shot: {MODELS[model_choice]['accuracy']}")
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
-    st.markdown('<div class="app-card-title">Artikulli</div>', unsafe_allow_html=True)
+    st.markdown('<div class="app-card-title">Vendos titullin ose lajmin</div>', unsafe_allow_html=True)
 
     ex_cols = st.columns(len(EXAMPLES))
     for i, (ex_name, ex_text) in enumerate(EXAMPLES.items()):
@@ -407,38 +491,32 @@ with tab_analyze:
             st.session_state["input_text"] = ex_text
             st.session_state["fetched_text"] = ex_text
 
-    input_mode = st.radio(
-        "Si do ta japësh lajmin?", ["Ngjit tekstin", "Vendos link (URL)"],
-        horizontal=True, label_visibility="collapsed",
-    )
+    input_mode = st.radio("Si do ta japësh lajmin?", ["Ngjit tekstin", "Vendos link (URL)"], horizontal=True, label_visibility="collapsed")
 
     if input_mode == "Ngjit tekstin":
         text = st.text_area(
             "Ngjit tekstin e një lajmi në shqip:",
             value=st.session_state.get("input_text", ""),
-            height=170,
-            placeholder="Ngjit lajmin ose linkun për ta analizuar...",
+            height=160,
+            placeholder="Ngjit titullin dhe/ose përmbajtjen e lajmit...",
             key="text_input_area",
             label_visibility="collapsed",
         )
+        source_url = None
     else:
-        url = st.text_input("Vendos linkun e artikullit:", placeholder="https://...", label_visibility="collapsed")
+        source_url = st.text_input("Vendos linkun e artikullit:", placeholder="https://...", label_visibility="collapsed")
         if st.button("Merr artikullin"):
-            if not url.strip():
+            if not source_url.strip():
                 st.warning("Fut një link para se të vazhdosh.")
             else:
                 try:
                     with st.spinner("Duke shkarkuar..."):
-                        fetched = fetch_article_text(url.strip())
+                        fetched = fetch_article_text(source_url.strip())
                     st.session_state["fetched_text"] = fetched
                     st.success(f"U morën {len(fetched)} karaktere.")
                 except ValueError as e:
                     st.error(str(e))
-        text = st.text_area(
-            "Teksti i marrë (mund ta redaktosh):",
-            value=st.session_state.get("fetched_text", ""),
-            height=170,
-        )
+        text = st.text_area("Teksti i marrë (mund ta redaktosh):", value=st.session_state.get("fetched_text", ""), height=160)
 
     analyze = st.button("ANALIZO", type="primary", use_container_width=True, disabled=not text.strip())
     st.markdown('</div>', unsafe_allow_html=True)
@@ -447,89 +525,121 @@ with tab_analyze:
         model_path = MODELS[model_choice]["path"]
         try:
             label, confidence, all_probs = predict(text, model_path)
-            truth_pct = all_probs[0] * 100  # probabiliteti REAL = "Truth Score"
+            truth_pct = all_probs[0] * 100
 
             with st.spinner("Duke analizuar me AI..."):
                 ruling = gemini_ruling(text, label, confidence)
 
-            result_tab_analysis, result_tab_verdict = st.tabs(["Analiza", "Verdikti"])
+            st.session_state["last_result"] = {
+                "ruling": ruling, "label": label, "confidence": confidence,
+                "truth_pct": truth_pct, "model_choice": model_choice,
+                "source_url": source_url, "text": text,
+            }
+        except OSError:
+            st.error(f"S'u gjet modeli te `{model_path}`. Kontrollo variablën MODELS.")
 
-            with result_tab_analysis:
-                st.markdown('<div class="score-row">', unsafe_allow_html=True)
-                cols = st.columns(4)
-                with cols[0]:
-                    score_card("Truth Score", ICON_CHECK, truth_pct)
-                with cols[1]:
-                    score_card("Besueshmëri", ICON_SHIELD, float(ruling.get("reliability_score", 50)))
-                with cols[2]:
-                    score_card("Konsensus", ICON_PEOPLE, float(ruling.get("consensus_score", 50)))
-                with cols[3]:
-                    score_card("Ndikim", ICON_BOLT, float(ruling.get("impact_score", 50)), invert=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+    result = st.session_state.get("last_result")
+    if result:
+        ruling = result["ruling"]
+        label = result["label"]
+        confidence = result["confidence"]
+        truth_pct = result["truth_pct"]
+        model_choice = result["model_choice"]
 
-                st.markdown('<div class="app-card">', unsafe_allow_html=True)
-                st.markdown('<div class="app-card-title">Përmbledhje</div>', unsafe_allow_html=True)
-                st.markdown(f'<p class="finding-text">{ruling.get("analysis_summary", "")}</p>', unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="headline-text">{ruling.get("headline", "")}</div>', unsafe_allow_html=True)
 
-                st.markdown('<div class="app-card">', unsafe_allow_html=True)
-                st.markdown('<div class="app-card-title">Gjetjet Kryesore</div>', unsafe_allow_html=True)
-                for finding in ruling.get("key_findings", []):
-                    st.markdown(
-                        f"""<div class="finding-card">
-                            <span class="finding-tag">{finding.get('tag','')}</span>
-                            <div class="finding-text">{finding.get('text','')}</div>
-                        </div>""",
-                        unsafe_allow_html=True,
-                    )
-                st.markdown('</div>', unsafe_allow_html=True)
+        result_tab_analysis, result_tab_verdict = st.tabs(["Analiza", "Verdikti"])
 
-                st.markdown('<div class="app-card">', unsafe_allow_html=True)
-                st.markdown('<div class="app-card-title">Debati</div>', unsafe_allow_html=True)
-                sup = ruling.get("debate_supportive", {})
-                crit = ruling.get("debate_critical", {})
-                sup_initial = (sup.get("author") or "?")[:1].upper()
-                crit_initial = (crit.get("author") or "?")[:1].upper()
+        with result_tab_analysis:
+            st.markdown('<div class="section-label">Rezultatet</div>', unsafe_allow_html=True)
+            st.markdown('<div class="score-row">', unsafe_allow_html=True)
+            cols = st.columns(4)
+            with cols[0]:
+                score_card("Truth Score", ICON_CHECK, truth_pct)
+            with cols[1]:
+                score_card("Besueshmëri", ICON_SHIELD, float(ruling.get("reliability_score", 50)))
+            with cols[2]:
+                score_card("Konsensus", ICON_PEOPLE, float(ruling.get("consensus_score", 50)))
+            with cols[3]:
+                score_card("Ndikim", ICON_BOLT, float(ruling.get("impact_score", 50)), invert=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            st.markdown('<div class="app-card">', unsafe_allow_html=True)
+            st.markdown('<div class="app-card-title">Përmbledhje</div>', unsafe_allow_html=True)
+            st.markdown(f'<p class="finding-text">{ruling.get("analysis_summary", "")}</p>', unsafe_allow_html=True)
+            st.caption(
+                f"Modeli i përdorur: {model_choice} ({MODELS[model_choice]['description']}) · "
+                f"saktësi few-shot {MODELS[model_choice]['accuracy']} · klasifikim: {label} ({confidence*100:.1f}%)"
+            )
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            st.markdown('<div class="section-label">Gjetjet Kryesore</div>', unsafe_allow_html=True)
+            for finding in ruling.get("key_findings", []):
                 st.markdown(
-                    f"""<div class="debate-row">
-                        <div class="debate-avatar" style="background:#3b82f6;">{sup_initial}</div>
-                        <div class="debate-bubble supportive">
-                            <div class="debate-author">{sup.get('author','')}</div>
-                            <div class="debate-text">{sup.get('text','')}</div>
-                        </div>
-                    </div>
-                    <div class="debate-row">
-                        <div class="debate-avatar" style="background:#ef4444;">{crit_initial}</div>
-                        <div class="debate-bubble critical">
-                            <div class="debate-author">{crit.get('author','')}</div>
-                            <div class="debate-text">{crit.get('text','')}</div>
-                        </div>
+                    f"""<div class="finding-card">
+                        <span class="finding-tag">{finding.get('tag','')}</span>
+                        <div class="finding-text">{finding.get('text','')}</div>
                     </div>""",
                     unsafe_allow_html=True,
                 )
-                st.markdown('</div>', unsafe_allow_html=True)
 
-            with result_tab_verdict:
-                verdict_label = "LAJM I RREMË" if label == "FAKE" else "LAJM I BESUESHËM"
-                verdict_color = "#ef4444" if label == "FAKE" else "#22c55e"
-                st.markdown(
-                    f"""
-                    <div class="final-verdict-card">
-                        <div class="final-verdict-title" style="color:{verdict_color} !important;">
-                            {verdict_label} · Truth Score {truth_pct:.0f}%
-                        </div>
-                        <div class="final-verdict-text">{ruling.get("verdict", "")}</div>
+            st.markdown('<div class="section-label">Debati</div>', unsafe_allow_html=True)
+            sup = ruling.get("debate_supportive", {})
+            crit = ruling.get("debate_critical", {})
+            sup_initial = (sup.get("author") or "?")[:1].upper()
+            crit_initial = (crit.get("author") or "?")[:1].upper()
+            st.markdown(
+                f"""<div class="debate-row">
+                    <div class="debate-avatar" style="background:#3b82f6;">{sup_initial}</div>
+                    <div class="debate-bubble supportive">
+                        <div class="debate-author">{sup.get('author','')}</div>
+                        <div class="debate-text">{sup.get('text','')}</div>
                     </div>
-                    """,
+                </div>
+                <div class="debate-row">
+                    <div class="debate-avatar" style="background:#ef4444;">{crit_initial}</div>
+                    <div class="debate-bubble critical">
+                        <div class="debate-author">{crit.get('author','')}</div>
+                        <div class="debate-text">{crit.get('text','')}</div>
+                    </div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+            if result.get("source_url"):
+                st.markdown('<div class="section-label">Burimi</div>', unsafe_allow_html=True)
+                st.markdown(f"[{result['source_url']}]({result['source_url']})")
+
+        with result_tab_verdict:
+            with st.expander("Pjesëmarrësit"):
+                st.markdown(f"**{sup.get('author','')}** — argument mbështetës")
+                st.markdown(f"**{crit.get('author','')}** — argument kritik")
+                st.markdown(f"**{model_choice}** — modeli klasifikues ({MODELS[model_choice]['accuracy']} saktësi)")
+
+            with st.expander("Të Dhënat e Rastit"):
+                st.text(result["text"][:1500])
+
+            verdict_label = "LAJM I RREMË" if label == "FAKE" else "LAJM I BESUESHËM"
+            verdict_color = "#ef4444" if label == "FAKE" else "#22c55e"
+            st.markdown(
+                f"""
+                <div class="final-verdict-card">
+                    <div class="final-verdict-title" style="color:{verdict_color} !important;">
+                        {ICON_SCALE} {verdict_label} · Truth Score {truth_pct:.0f}%
+                    </div>
+                    <div class="final-verdict-text">{ruling.get("verdict", "")}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            st.markdown('<div class="section-label">Fakte të Verifikuara</div>', unsafe_allow_html=True)
+            for finding in ruling.get("key_findings", []):
+                st.markdown(
+                    f"""<div class="fact-row"><span class="fact-check">{ICON_CHECK}</span>
+                    <div class="finding-text">{finding.get('text','')}</div></div>""",
                     unsafe_allow_html=True,
                 )
-                st.caption(f"Klasifikuesi {model_choice}: {label} me {confidence*100:.1f}% siguri.")
-
-        except OSError:
-            st.error(
-                f"S'u gjet modeli te `{model_path}`. Kontrollo variablën MODELS "
-                "në krye të app.py."
-            )
 
     st.markdown(
         '<p class="disclaimer">Prototip akademik për demonstrim, jo mjet i verifikuar për prodhim. '
@@ -538,9 +648,39 @@ with tab_analyze:
     )
 
 # ---------------------------------------------------------------------------
-# TAB 2: GJETJET E KERKIMIT (permbajtje akademike, e paprekur)
+# FAQJA: VERIFIKIMI AI (CHAT)
 # ---------------------------------------------------------------------------
-with tab_findings:
+elif st.session_state["page"] == "chat":
+    top_bar("Verifikimi AI")
+    st.markdown(
+        '<p class="app-subtitle">Vendos një lajm ose pyetje më poshtë — Verifikimi AI përgjigjet direkt.</p>',
+        unsafe_allow_html=True,
+    )
+
+    if "chat_history" not in st.session_state:
+        st.session_state["chat_history"] = []
+
+    for turn in st.session_state["chat_history"]:
+        with st.chat_message("user" if turn["role"] == "user" else "assistant"):
+            st.write(turn["text"])
+
+    user_msg = st.chat_input("Vendos lajmin ose pyetjen tënde...")
+    if user_msg:
+        st.session_state["chat_history"].append({"role": "user", "text": user_msg})
+        with st.chat_message("user"):
+            st.write(user_msg)
+        with st.chat_message("assistant"):
+            with st.spinner("Duke menduar..."):
+                reply = gemini_chat_reply(st.session_state["chat_history"])
+            st.write(reply)
+        st.session_state["chat_history"].append({"role": "assistant", "text": reply})
+
+# ---------------------------------------------------------------------------
+# FAQJA: GJETJET E KERKIMIT (permbajtje akademike)
+# ---------------------------------------------------------------------------
+elif st.session_state["page"] == "findings":
+    top_bar("Gjetjet e Kërkimit")
+
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
     st.markdown('<div class="app-card-title">Përmbledhje e eksperimenteve</div>', unsafe_allow_html=True)
     st.markdown(
