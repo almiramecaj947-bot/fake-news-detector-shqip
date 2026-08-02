@@ -1,11 +1,11 @@
 {
-  "name": "Verifiko — Zbulues i Lajmeve te Rreme",
-  "short_name": "Verifiko",
+  "name": "TruthNews Albania — Zbulues i Lajmeve te Rreme",
+  "short_name": "TruthNews AL",
   "description": "Zbulues i lajmeve te rreme ne shqip - Diplome ML (Almira Mecaj)",
   "start_url": "https://fake-news-detector-shqip-2jjmg6l3uqqjs2mjpg3wkr.streamlit.app/",
   "display": "standalone",
-  "background_color": "#5b21b6",
-  "theme_color": "#5b21b6",
+  "background_color": "#0c0c10",
+  "theme_color": "#0c0c10",
   "icons": [
     {
       "src": "https://raw.githubusercontent.com/almiramecaj947-bot/fake-news-detector-shqip/main/static/icon-192.png",
