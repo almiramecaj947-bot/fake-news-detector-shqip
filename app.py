@@ -19,7 +19,7 @@ import torch
 import trafilatura
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-APP_TITLE = "Verify Albanian News"
+APP_TITLE = "TruthNews Albania"
 
 # ---------------------------------------------------------------------------
 # PWA HEAD TAGS
@@ -46,7 +46,7 @@ def _install_pwa_head_tags():
             '<meta name="theme-color" content="#0b0b12">\n'
             '<meta name="apple-mobile-web-app-capable" content="yes">\n'
             '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">\n'
-            '<meta name="apple-mobile-web-app-title" content="Verifiko">\n'
+            '<meta name="apple-mobile-web-app-title" content="TruthNews AL">\n'
         )
         html = html.replace("</head>", tags + "</head>")
         index_path.write_text(html, encoding="utf-8")
