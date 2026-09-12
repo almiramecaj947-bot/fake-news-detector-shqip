@@ -73,6 +73,107 @@ MODELS = {
 }
 LABELS = {0: "REAL", 1: "FAKE"}
 
+# ---------------------------------------------------------------------------
+# KONTEKST FAIRNESS-I (rezultate reale nga auditi i Kreut 4.7 te diploma)
+# ---------------------------------------------------------------------------
+# I RËNDËSISHËM: këto janë statistika NDËR-ARTIKUJSH (mbi 1.192 artikuj testimi),
+# jo një "% bias" i vetë artikullit — Equal Opportunity Gap/FPR/FNR llogariten
+# vetëm mbi grupe, jo mbi 1 rast të vetëm. Këtu përdoren si KONTEKST: në cilin
+# grup bie artikulli i ri, dhe si ka performuar modeli historikisht për atë grup.
+FAIRNESS_OVERALL = {"fpr": 1.17, "fnr": 4.38, "n": 1192}
+
+TOPIC_KEYWORDS = {
+    "Politikë": ["qeveri", "kryeministr", "parlament", "deputet", "zgjedhje", "president",
+                 "opozit", "ministri", "kuvend", "partia", "kryetar bashkie"],
+    "Ekonomi": ["ekonomi", "buxhet", "taksë", "inflacion", "lek", "euro", "bankë", "biznes",
+                "investim", "papunësi", "pagë"],
+    "Shëndetësi": ["spital", "covid", "virus", "vaksin", "mjek", "sëmundje", "pandemi",
+                   "shëndetësor", "infeksion"],
+    "Krim/Siguri": ["policia", "vrasje", "arrestim", "krim", "aksident", "gjykata", "hetim",
+                    "drogë", "terrorist"],
+    "Sport/Argëtim": ["futboll", "kampion", "ndeshje", "aktor", "këngëtar", "koncert", "film",
+                      "muzikë", "sport"],
+}
+
+# Nga run/data/rezultate_tema.csv (12 shtator 2026, pool auditimi n=1.192)
+FAIRNESS_TOPIC = {
+    "Ekonomi":       {"n": 99,  "recall": 98.11, "fpr": 0.00, "fnr": 1.89,  "flag": False},
+    "Krim/Siguri":   {"n": 112, "recall": 100.0,  "fpr": 0.00, "fnr": 0.00,  "flag": False},
+    "Politikë":      {"n": 391, "recall": 94.33, "fpr": 1.02, "fnr": 5.67,  "flag": False},
+    "Shëndetësi":    {"n": 264, "recall": 91.35, "fpr": 1.88, "fnr": 8.65,  "flag": True},
+    "Sport/Argëtim": {"n": 119, "recall": 93.75, "fpr": 0.00, "fnr": 6.25,  "flag": False},
+    "Tjetër":        {"n": 207, "recall": 98.47, "fpr": 2.63, "fnr": 1.53,  "flag": False},
+}
+
+# Nga run/data/rezultate_stili.csv — kufijtë (13, 24) janë tertilet e numrit të
+# fjalëve TËRËSISHT me shkronja të mëdha, mbi po atë pool auditimi
+STYLE_BOUNDS = (13, 24)
+FAIRNESS_STYLE = {
+    "Neutral":        {"n": 398, "recall": 96.07, "fpr": 1.78, "fnr": 3.93, "flag": False},
+    "Mesatar":        {"n": 397, "recall": 96.67, "fpr": 0.64, "fnr": 3.33, "flag": False},
+    "Sensacionalist": {"n": 397, "recall": 92.80, "fpr": 1.10, "fnr": 7.20, "flag": True},
+}
+
+# Nga run/data/rezultate_burimi_domain.csv — VETËM accuracy (jo FPR/FNR: shih
+# kufizimin metodologjik te 4.7.3 e diplomës, domain-i është pothuajse vetë etiketa)
+FAIRNESS_DOMAIN = {
+    "lifestoriesz.com": 80.00, "lajmealb.xyz": 84.78, "showbiziks.com": 85.71,
+    "valetal.live": 87.50, "bit.ly": 88.30, "infokosova.net": 96.85,
+    "gazetaexpress.com": 97.22, "mesazhi.com": 98.11, "promakale.com": 98.51,
+    "botasot.info": 98.72, "kallxo.com": 100.0, "gazetaktuale.press": 100.0,
+    "koha.net": 100.0, "kosova-sot.info": 100.0, "bdnewsfeed24.com": 100.0,
+    "audipassionmagazine.club": 100.0, "media24newss.com": 100.0,
+    "mediaworldd.co": 100.0, "thedailybarta24.com": 100.0, "telegrafi.com": 100.0,
+    "trendi-kspro.com": 100.0, "valetal.info": 100.0, "winingal.com": 100.0,
+    "zeriamerikes.com": 100.0,
+}
+
+
+def _norm(t: str) -> str:
+    return re.sub(r"\s+", " ", str(t)).strip().lower()
+
+
+def detect_topic(text: str) -> str:
+    tl = _norm(text)
+    scores = {k: sum(tl.count(w) for w in ws) for k, ws in TOPIC_KEYWORDS.items()}
+    best = max(scores, key=scores.get)
+    return best if scores[best] > 0 else "Tjetër"
+
+
+def detect_style(text: str) -> str:
+    upper_count = sum(1 for w in str(text).split() if w.isupper() and len(w) > 1)
+    low, high = STYLE_BOUNDS
+    if upper_count <= low:
+        return "Neutral"
+    if upper_count <= high:
+        return "Mesatar"
+    return "Sensacionalist"
+
+
+def detect_domain(source_url: str):
+    if not source_url:
+        return None
+    try:
+        from urllib.parse import urlparse
+        netloc = urlparse(source_url if "://" in source_url else "https://" + source_url).netloc.lower()
+        netloc = netloc.replace("www.", "")
+        return netloc or None
+    except Exception:
+        return None
+
+
+def fairness_context(text: str, source_url: str = None) -> dict:
+    """Kontekst fairness-i për artikullin: në cilin grup bie (temë/stil/burim) dhe
+    si ka performuar modeli historikisht për atë grup, sipas auditit të Kreut 4.7."""
+    topic = detect_topic(text)
+    style = detect_style(text)
+    domain = detect_domain(source_url)
+    return {
+        "topic": topic, "topic_stats": FAIRNESS_TOPIC[topic],
+        "style": style, "style_stats": FAIRNESS_STYLE[style],
+        "domain": domain, "domain_accuracy": FAIRNESS_DOMAIN.get(domain) if domain else None,
+    }
+
 EXAMPLES = {
     "Shembull real": (
         "Adelina e tepron me fustanin e shkurtër Adelina Tahiri është një ndër femrat më "
@@ -352,6 +453,16 @@ st.markdown(
         border-radius: 999px; margin-bottom: 0.35rem; letter-spacing: 0.03em;
     }
     .finding-text { color: #d0d0d8 !important; font-size: 0.88rem; line-height: 1.4; }
+
+    /* ---------- KONTEKST FAIRNESS-I ---------- */
+    .fair-badge-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+    .fair-badge { flex: 1; min-width: 150px; background: #101014; border: 1px solid #222229; border-radius: 14px; padding: 0.7rem 0.85rem; }
+    .fair-badge.flagged { border-color: rgba(239,68,68,0.45); background: rgba(239,68,68,0.06); }
+    .fair-badge-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.03em; color: #8b8b96 !important; font-weight: 700; margin-bottom: 0.25rem; }
+    .fair-badge-group { font-size: 0.95rem; font-weight: 700; color: #ececf1 !important; margin-bottom: 0.3rem; }
+    .fair-badge-stat { font-size: 0.78rem; color: #b3b3bc !important; line-height: 1.35; }
+    .fair-badge-flag { font-size: 0.72rem; color: #fca5a5 !important; font-weight: 600; margin-top: 0.3rem; }
+    .fair-note { font-size: 0.76rem; color: #6d6d78 !important; line-height: 1.5; margin-top: 0.6rem; }
     .fact-row { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.55rem 0; border-bottom: 1px solid #1e1e26; }
     .fact-row:last-child { border-bottom: none; }
     .fact-check { flex-shrink: 0; color: #22c55e; margin-top: 0.1rem; }
@@ -389,6 +500,23 @@ def gauge_color(pct: float, invert: bool = False) -> str:
     if v >= 40:
         return "#f59e0b"
     return "#ef4444"
+
+
+def fair_badge(label: str, group: str, stats: dict, overall_fnr: float) -> str:
+    flagged = stats.get("flag", False)
+    cls = "fair-badge flagged" if flagged else "fair-badge"
+    flag_html = (
+        f'<div class="fair-badge-flag">⚠ FNR/FPR ≥1,5× mesatares dataset-it</div>' if flagged else ""
+    )
+    return f"""
+    <div class="{cls}">
+        <div class="fair-badge-label">{label}</div>
+        <div class="fair-badge-group">{group}</div>
+        <div class="fair-badge-stat">Recall: {stats['recall']:.1f}% · FPR: {stats['fpr']:.1f}% · FNR: {stats['fnr']:.1f}%</div>
+        <div class="fair-badge-stat">(n={stats['n']} në pool-in e auditimit · mesatarja e dataset-it: FNR {overall_fnr:.1f}%)</div>
+        {flag_html}
+    </div>
+    """
 
 
 def score_card(label: str, icon_svg: str, pct: float, invert: bool = False):
@@ -526,6 +654,7 @@ elif st.session_state["page"] == "analysis":
         try:
             label, confidence, all_probs = predict(text, model_path)
             truth_pct = all_probs[0] * 100
+            fairness = fairness_context(text, source_url)
 
             with st.spinner("Duke analizuar me AI..."):
                 ruling = gemini_ruling(text, label, confidence)
@@ -533,7 +662,7 @@ elif st.session_state["page"] == "analysis":
             st.session_state["last_result"] = {
                 "ruling": ruling, "label": label, "confidence": confidence,
                 "truth_pct": truth_pct, "model_choice": model_choice,
-                "source_url": source_url, "text": text,
+                "source_url": source_url, "text": text, "fairness": fairness,
             }
         except OSError:
             st.error(f"S'u gjet modeli te `{model_path}`. Kontrollo variablën MODELS.")
@@ -572,6 +701,34 @@ elif st.session_state["page"] == "analysis":
                 f"saktësi few-shot {MODELS[model_choice]['accuracy']} · klasifikim: {label} ({confidence*100:.1f}%)"
             )
             st.markdown('</div>', unsafe_allow_html=True)
+
+            fairness = result.get("fairness")
+            if fairness:
+                st.markdown('<div class="app-card">', unsafe_allow_html=True)
+                st.markdown('<div class="app-card-title">Konteksti i Fairness-it (Kreu 4.7 i punimit)</div>', unsafe_allow_html=True)
+                st.markdown('<div class="fair-badge-row">', unsafe_allow_html=True)
+                badges = fair_badge(
+                    "Tema e zbuluar", fairness["topic"], fairness["topic_stats"], FAIRNESS_OVERALL["fnr"]
+                ) + fair_badge(
+                    "Stili i zbuluar", fairness["style"], fairness["style_stats"], FAIRNESS_OVERALL["fnr"]
+                )
+                st.markdown(badges, unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+                if fairness.get("domain") and fairness.get("domain_accuracy") is not None:
+                    st.markdown(
+                        f'<div class="fair-badge-stat">Burimi <b>{fairness["domain"]}</b> — '
+                        f'accuracy historike: {fairness["domain_accuracy"]:.1f}% '
+                        f'(shih Kreu 4.7.3; jo EOG, thjesht accuracy përshkrues).</div>',
+                        unsafe_allow_html=True,
+                    )
+                st.markdown(
+                    '<div class="fair-note">Këto NUK janë bias/fairness i vetë këtij artikulli — '
+                    'Equal Opportunity Gap/FPR/FNR maten mbi grupe artikujsh, jo mbi 1 rast. '
+                    'Numrat tregojnë si ka performuar historikisht modeli XLM-R few-shot për grupin '
+                    '(temë/stil/burim) ku bie ky artikull, sipas auditit të kryer në Kreun 4.7 të diplomës.</div>',
+                    unsafe_allow_html=True,
+                )
+                st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="section-label">Gjetjet Kryesore</div>', unsafe_allow_html=True)
             for finding in ruling.get("key_findings", []):
