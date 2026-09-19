@@ -352,7 +352,20 @@ def _chart_data_uri(rel_path: str) -> str:
 
 
 def chart_card(rel_path: str, caption_html: str):
-    uri = _chart_data_uri(rel_path)
+    try:
+        uri = _chart_data_uri(rel_path)
+    except FileNotFoundError:
+        # Grafiku PNG mungon te repo-ja e vendosur (p.sh. u ngarkua vetëm app.py, jo
+        # dhe static/charts/) — shfaqim një njoftim të qetë në vend që të prishim
+        # gjithë faqen me një error.
+        st.markdown(
+            f"""<div class="chart-card">
+                <div class="fair-note">⚠ Grafiku "{rel_path}" nuk u gjet te repo-ja — ngarko dosjen static/charts/ te GitHub.</div>
+                <div class="chart-caption">{caption_html}</div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+        return
     st.markdown(
         f"""<div class="chart-card">
             <img src="{uri}" alt="" />
@@ -450,19 +463,19 @@ st.markdown(
     /* ---------- TOP BAR ---------- */
     .topbar-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem; }
     .app-title { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.4px; margin: 0; color: #17171a !important; }
-    .app-title .accent { color: #1fa971 !important; }
+    .app-title .accent { color: #7133da !important; }
     div[class*="st-key-iconbtn_"] button {
         border-radius: 999px !important; width: 42px !important; height: 42px !important; padding: 0 !important;
         background: #ffffff !important; border: 1px solid #e4e4de !important; color: #4a4a52 !important;
         box-shadow: 0 2px 8px -4px rgba(0,0,0,0.15) !important; display: flex; align-items: center; justify-content: center;
     }
-    div[class*="st-key-iconbtn_"] button:hover { border-color: #1fa971 !important; color: #1fa971 !important; }
+    div[class*="st-key-iconbtn_"] button:hover { border-color: #7133da !important; color: #7133da !important; }
     div[class*="st-key-iconbtn_"] button p { font-size: 1.1rem !important; }
 
     .app-eyebrow {
         display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; font-weight: 700;
-        text-transform: uppercase; letter-spacing: 0.06em; color: #1fa971 !important;
-        background: rgba(31,169,113,0.12); border: 1px solid rgba(31,169,113,0.3);
+        text-transform: uppercase; letter-spacing: 0.06em; color: #7133da !important;
+        background: rgba(113,51,218,0.12); border: 1px solid rgba(113,51,218,0.3);
         padding: 0.22rem 0.65rem; border-radius: 999px; margin-bottom: 0.6rem;
     }
     .app-subtitle { font-size: 0.88rem; color: #6b6b76 !important; margin-bottom: 1.2rem; line-height: 1.45; }
@@ -494,14 +507,28 @@ st.markdown(
         border-radius: 12px !important; font-weight: 600 !important; border: 1px solid #e4e4de !important;
         background: #ffffff !important; color: #3a3a42 !important;
     }
-    .stButton > button:hover { border-color: #1fa971 !important; color: #148a5c !important; }
-    .stButton > button[kind="primary"] { background: #1fa971 !important; color: #ffffff !important; border: none !important; }
-    .stButton > button[kind="primary"]:hover { background: #17925f !important; color: #ffffff !important; }
+    .stButton > button:hover { border-color: #7133da !important; color: #4d1e9c !important; }
+    .stButton > button[kind="primary"] { background: #7133da !important; color: #ffffff !important; border: none !important; }
+    .stButton > button[kind="primary"]:hover { background: #5a26b0 !important; color: #ffffff !important; }
     .stButton > button:disabled { background: #f2f2ef !important; color: #b6b6ae !important; border: 1px solid #e4e4de !important; }
+    /* Streamlit fokuson/kliminon butonat me një unazë të kuqe-zezë të parazgjedhur —
+       e mbajmë gjithmonë jeshile, si ngjyra e markës. */
+    .stButton > button:focus, .stButton > button:focus-visible, .stButton > button:active {
+        border-color: #7133da !important; color: #4d1e9c !important;
+        box-shadow: 0 0 0 2px rgba(113,51,218,0.25) !important; outline: none !important;
+    }
+    .stButton > button[kind="primary"]:focus, .stButton > button[kind="primary"]:active {
+        background: #5a26b0 !important; color: #ffffff !important;
+        box-shadow: 0 0 0 2px rgba(113,51,218,0.35) !important;
+    }
+    div[role="radiogroup"] label:focus-within, div[role="radiogroup"] label:has(input:checked) {
+        color: #4d1e9c !important;
+    }
+    button:focus-visible { outline-color: #7133da !important; }
 
     [data-baseweb="tab-list"] { gap: 0.3rem; background: transparent; border-bottom: 1px solid #ebebe6; }
     [data-baseweb="tab"] { border-radius: 0 !important; font-weight: 600; color: #8a8a92 !important; }
-    [aria-selected="true"][data-baseweb="tab"] { color: #17171a !important; border-bottom: 2px solid #1fa971 !important; }
+    [aria-selected="true"][data-baseweb="tab"] { color: #17171a !important; border-bottom: 2px solid #7133da !important; }
 
     textarea, input { background: #fbfbf9 !important; color: #17171a !important; border-color: #e4e4de !important; border-radius: 12px !important; }
 
@@ -510,8 +537,8 @@ st.markdown(
 
     /* ---------- MENU FILLESTAR ---------- */
     .hero-card {
-        background: linear-gradient(135deg, #1fa971 0%, #17925f 100%); border-radius: 22px;
-        padding: 1.7rem 1.5rem; margin-bottom: 1.1rem; box-shadow: 0 14px 30px -16px rgba(31,169,113,0.55);
+        background: linear-gradient(135deg, #7133da 0%, #5a26b0 100%); border-radius: 22px;
+        padding: 1.7rem 1.5rem; margin-bottom: 1.1rem; box-shadow: 0 14px 30px -16px rgba(113,51,218,0.55);
         color: #ffffff !important;
     }
     .hero-card * { color: #ffffff !important; }
@@ -519,7 +546,7 @@ st.markdown(
     .hero-title { font-weight: 800; font-size: 1.15rem; margin-bottom: 0.2rem; }
     .hero-desc { font-size: 0.84rem; opacity: 0.92; line-height: 1.4; }
     div[class*="st-key-hero_btn"] button {
-        background: #ffffff !important; color: #148a5c !important; font-weight: 700 !important; border: none !important;
+        background: #ffffff !important; color: #4d1e9c !important; font-weight: 700 !important; border: none !important;
         margin-top: 0.9rem !important;
     }
     div[class*="st-key-hero_btn"] button:hover { background: #f2f2ef !important; color: #0f6f49 !important; }
@@ -530,15 +557,15 @@ st.markdown(
         box-shadow: 0 8px 20px -16px rgba(20,20,15,0.15);
     }
     .menu-icon {
-        flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px; background: rgba(42,120,214,0.12);
-        color: #2a78d6; display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px; background: rgba(113,51,218,0.1);
+        color: #8a5cf0; display: flex; align-items: center; justify-content: center;
     }
-    .menu-icon.good { background: rgba(31,169,113,0.14); color: #1fa971; }
+    .menu-icon.good { background: rgba(113,51,218,0.16); color: #7133da; }
     .menu-title { font-weight: 700; font-size: 0.98rem; margin-bottom: 0.15rem; color: #17171a !important; }
     .menu-desc { font-size: 0.8rem; color: #6b6b76 !important; line-height: 1.35; }
     .menu-badge {
         display: inline-block; font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
-        letter-spacing: 0.03em; color: #1fa971 !important; background: rgba(31,169,113,0.14);
+        letter-spacing: 0.03em; color: #7133da !important; background: rgba(113,51,218,0.14);
         padding: 0.08rem 0.5rem; border-radius: 999px; margin-left: 0.4rem; vertical-align: middle;
     }
 
@@ -547,7 +574,7 @@ st.markdown(
         justify-content: flex-start !important; background: transparent !important; border: none !important;
         padding: 0.5rem 0.2rem !important; font-weight: 600 !important; color: #3a3a42 !important;
     }
-    div[class*="st-key-nav_"] button:hover { color: #1fa971 !important; }
+    div[class*="st-key-nav_"] button:hover { color: #7133da !important; }
 
     /* ---------- 4 GAUGE SCORE CARDS ---------- */
     .score-row { display: flex; gap: 0.55rem; margin: 0.2rem 0 1rem 0; }
@@ -600,8 +627,8 @@ st.markdown(
     .debate-text { color: #2c2c33 !important; font-size: 0.86rem; line-height: 1.4; }
 
     /* ---------- VERDICT ---------- */
-    .final-verdict-card { background: #ffffff; border: 1px solid rgba(31,169,113,0.4); border-radius: 16px; padding: 1.1rem 1.2rem; margin-top: 0.3rem; box-shadow: 0 10px 24px -16px rgba(20,20,15,0.18); }
-    .final-verdict-title { font-weight: 700; font-size: 0.95rem; color: #148a5c !important; margin-bottom: 0.6rem; display: flex; align-items: center; gap: 0.4rem; }
+    .final-verdict-card { background: #ffffff; border: 1px solid rgba(113,51,218,0.4); border-radius: 16px; padding: 1.1rem 1.2rem; margin-top: 0.3rem; box-shadow: 0 10px 24px -16px rgba(20,20,15,0.18); }
+    .final-verdict-title { font-weight: 700; font-size: 0.95rem; color: #4d1e9c !important; margin-bottom: 0.6rem; display: flex; align-items: center; gap: 0.4rem; }
     .final-verdict-text { color: #17171a !important; font-size: 0.9rem; line-height: 1.55; }
 
     .disclaimer { font-size: 0.74rem; color: #a5a5ac !important; text-align: center; margin-top: 1.4rem; line-height: 1.4; }
@@ -645,7 +672,7 @@ def fair_badge(label: str, group: str, stats: dict, overall_fnr: float) -> str:
         <div class="fair-badge-label">{label}</div>
         <div class="fair-badge-group">{group}</div>
         <div class="fair-badge-stat">Recall: {stats['recall']:.1f}% · FPR: {stats['fpr']:.1f}% · FNR: {stats['fnr']:.1f}%</div>
-        <div class="fair-badge-stat">(n={stats['n']} në pool-in e auditimit · mesatarja e dataset-it: FNR {overall_fnr:.1f}%)</div>
+        <div class="fair-badge-stat">(n={stats['n']} në grupin e testuar · mesatarja e dataset-it: FNR {overall_fnr:.1f}%)</div>
         {flag_html}
     </div>"""
     # Shih shënimin te _score_card_html: rrafshohet për t'u siguruar që 2 karta të
@@ -732,7 +759,7 @@ def go_to(page_name):
 
 
 NAV_ITEMS = [
-    ("menu", "🏠  Ballina"),
+    ("menu", "🏠  Faqja Kryesore"),
     ("analysis", "🔎  Analizo Lajm"),
     ("findings", "⚖️  Drejtësia & Bias-i"),
     ("chat", "💬  Verifikimi AI"),
@@ -794,7 +821,7 @@ if st.session_state["page"] == "menu":
     st.markdown(
         f"""<div class="menu-card"><div class="menu-icon good">{ICON_SCALE_LG}</div>
         <div><div class="menu-title">Drejtësia &amp; Bias-i i Modelit<span class="menu-badge">Kërkimi</span></div>
-        <div class="menu-desc">Rezultatet reale të auditit të fairness-it nga diploma.</div>
+        <div class="menu-desc">Rezultatet reale të vlerësimit të fairness-it nga diploma.</div>
         </div></div>""",
         unsafe_allow_html=True,
     )
@@ -872,7 +899,7 @@ elif st.session_state["page"] == "analysis":
             truth_pct = all_probs[0] * 100
             fairness = fairness_context(text, source_url)
 
-            with st.spinner("Duke analizuar me AI..."):
+            with st.spinner("Duke lexuar..."):
                 ruling = gemini_ruling(text, label, confidence)
 
             st.session_state["last_result"] = {
@@ -918,7 +945,7 @@ elif st.session_state["page"] == "analysis":
                     st.markdown('<div class="app-card-title">Bias &amp; Fairness (Kreu 4.7 i punimit)</div>', unsafe_allow_html=True)
                     bias_fairness_row(fairness)
                     st.markdown(
-                        '<div class="fair-note">Kontekst nga auditi i diplomës mbi 1.192 artikuj — jo bias/fairness i vetë '
+                        '<div class="fair-note">Kontekst nga vlerësimi i diplomës mbi 1.192 artikuj — jo bias/fairness i vetë '
                         'këtij 1 artikulli (EOG/FPR/FNR maten mbi grupe, jo mbi 1 rast).</div>',
                         unsafe_allow_html=True,
                     )
@@ -1045,7 +1072,7 @@ elif st.session_state["page"] == "chat":
 elif st.session_state["page"] == "findings":
     top_bar("Drejtësia & Bias-i i Modelit")
     st.markdown(
-        '<p class="app-subtitle">Rezultatet e mëposhtme vijnë drejtpërdrejt nga auditi i fairness-it '
+        '<p class="app-subtitle">Rezultatet e mëposhtme vijnë drejtpërdrejt nga vlerësimi i fairness-it '
         'i kryer në punimin e diplomës (Kreu III–IV), mbi 1.192 artikuj shqip. Nuk janë ilustrime — '
         'janë gjetjet reale që qëndrojnë pas kontekstit të fairness-it që sheh te Analiza e Detajuar.</p>',
         unsafe_allow_html=True,
@@ -1054,7 +1081,7 @@ elif st.session_state["page"] == "findings":
     st.markdown(
         f"""<div class="stat-pill-row">
             <div class="stat-pill"><div class="stat-pill-value">95,5%</div><div class="stat-pill-label">Accuracy më e lartë (XLM-R, few-shot)</div></div>
-            <div class="stat-pill"><div class="stat-pill-value">1.192</div><div class="stat-pill-label">Artikuj në pool-in e auditimit</div></div>
+            <div class="stat-pill"><div class="stat-pill-value">1.192</div><div class="stat-pill-label">Artikuj në grupin e testuar</div></div>
             <div class="stat-pill"><div class="stat-pill-value">Shëndetësi</div><div class="stat-pill-label">Grupi me normën më të lartë gabimi</div></div>
         </div>""",
         unsafe_allow_html=True,
