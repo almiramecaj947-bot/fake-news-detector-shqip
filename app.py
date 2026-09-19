@@ -12,14 +12,13 @@ import json
 import pathlib
 import re
 
-import pandas as pd
 import requests
 import streamlit as st
 import torch
 import trafilatura
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-APP_TITLE = "TruthNews Albania"
+APP_TITLE = "TruthNews AL"
 
 # ---------------------------------------------------------------------------
 # PWA HEAD TAGS
@@ -341,6 +340,28 @@ def fetch_article_text(url: str) -> str:
     return extracted.strip()
 
 
+@st.cache_data(show_spinner=False)
+def _chart_data_uri(rel_path: str) -> str:
+    """Lexon një grafik PNG statik dhe e kthen si data-URI, që të futet direkt brenda
+    një kartele HTML (st.image nuk mund të vendoset brenda një div-i të stilizuar,
+    sepse Streamlit e nxjerr në një kontejner tjetër)."""
+    import base64
+    path = pathlib.Path(__file__).parent / rel_path
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
+def chart_card(rel_path: str, caption_html: str):
+    uri = _chart_data_uri(rel_path)
+    st.markdown(
+        f"""<div class="chart-card">
+            <img src="{uri}" alt="" />
+            <div class="chart-caption">{caption_html}</div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+
 # ---------------------------------------------------------------------------
 # SVG IKONA
 # ---------------------------------------------------------------------------
@@ -370,9 +391,29 @@ ICON_ANALYSIS = """<svg width="26" height="26" viewBox="0 0 24 24" fill="none" x
 ICON_SCALE = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 <path d="M12 3V21M6 6H18M6 6L3 12H9L6 6ZM18 6L15 12H21L18 6Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>"""
 
+ICON_SCALE_LG = """<svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 3V21M6 6H18M6 6L3 12H9L6 6ZM18 6L15 12H21L18 6Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>"""
+
+ICON_MENU = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M4 6H20M4 12H20M4 18H20" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>"""
+
+ICON_USER = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<circle cx="12" cy="8" r="3.6" stroke="currentColor" stroke-width="2"/>
+<path d="M4.5 20C4.5 15.9 7.85 13 12 13C16.15 13 19.5 15.9 19.5 20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>"""
+
+ICON_GAUGE = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M4 17C4 11.48 7.58 7 12 7C16.42 7 20 11.48 20 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+<path d="M12 17L15.5 11.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+<circle cx="12" cy="17" r="1.3" fill="currentColor"/></svg>"""
+
+ICON_INFO = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+<path d="M12 11V16.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+<circle cx="12" cy="8" r="1.1" fill="currentColor"/></svg>"""
+
 
 # ---------------------------------------------------------------------------
-# UI SETUP - TEMA E ERRET, MINIMALE
+# UI SETUP - TEMA E ÇELËT, SI NË MOCKUP
 # ---------------------------------------------------------------------------
 st.set_page_config(page_title=APP_TITLE, page_icon="🛡️", layout="centered")
 
@@ -382,111 +423,203 @@ st.markdown(
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    .stApp { background: #0c0c10; }
+    .stApp { background: #f2f2ef; }
+    /* Shënim: st.columns() e Streamlit-it i "palos" kolonat vertikalisht nën ~640px gjerësi —
+       gjë që del keq për rreshta me shumë elementë në gjerësi telefoni. Për rreshtat
+       vetëm-për-shfaqje (4 kutitë e score-it, bias/fairness) ndërtohen si NJË div flex
+       me HTML (shih render_score_row/bias_fairness_row) në vend të st.columns, në mënyrë
+       që të mbeten gjithmonë horizontale pavarësisht gjerësisë. st.columns përdoret vetëm
+       kur na duhen widget-e reale (butona/radio), ku sjellja e Streamlit-it (stakim vertikal
+       në telefon) është e pranueshme. */
+    /* Shiriti sipër: ikonat e hamburger-it/profilit dalin nga rrjedha normale dhe
+       "ngjiten" në cepat e block-container-it, që titulli mund të qëndrojë i qendërzuar
+       pa u prekur nga sjellja e paqëndrueshme e st.columns në gjerësi telefoni. */
+    .block-container { position: relative; }
+    div[class*="st-key-iconbtn_menu"] { position: absolute; top: 0.15rem; left: 0; z-index: 999; }
+    div[class*="st-key-iconbtn_profile"] { position: absolute; top: 0.15rem; right: 0; z-index: 999; }
+    div[class*="st-key-iconbtn_"] [data-testid="stElementContainer"] { margin: 0 !important; }
+    div[class*="st-key-iconbtn_"] [data-testid="stVerticalBlockBorderWrapper"] { margin: 0 !important; }
     #MainMenu { visibility: hidden; }
     footer { visibility: hidden; }
-    [data-testid="stHeader"] { background: transparent; }
+    [data-testid="stHeader"] { background: transparent; pointer-events: none; }
     [data-testid="stToolbar"] { display: none; }
-    .block-container { padding-top: 2rem; max-width: 720px; }
+    .block-container { padding-top: 1.1rem; max-width: 720px; }
 
-    h1, h2, h3, p, span, label, div { color: #ececf1; }
+    h1, h2, h3, p, span, label, div { color: #17171a; }
 
-    .app-title { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.4px; margin-bottom: 0.15rem; }
-    .app-subtitle { font-size: 0.88rem; color: #8b8b96 !important; margin-bottom: 1.4rem; line-height: 1.4; }
-    .headline-text { font-size: 1.3rem; font-weight: 800; line-height: 1.35; margin: 0.3rem 0 1.1rem 0; }
+    /* ---------- TOP BAR ---------- */
+    .topbar-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem; }
+    .app-title { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.4px; margin: 0; color: #17171a !important; }
+    .app-title .accent { color: #1fa971 !important; }
+    div[class*="st-key-iconbtn_"] button {
+        border-radius: 999px !important; width: 42px !important; height: 42px !important; padding: 0 !important;
+        background: #ffffff !important; border: 1px solid #e4e4de !important; color: #4a4a52 !important;
+        box-shadow: 0 2px 8px -4px rgba(0,0,0,0.15) !important; display: flex; align-items: center; justify-content: center;
+    }
+    div[class*="st-key-iconbtn_"] button:hover { border-color: #1fa971 !important; color: #1fa971 !important; }
+    div[class*="st-key-iconbtn_"] button p { font-size: 1.1rem !important; }
+
+    .app-eyebrow {
+        display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.06em; color: #1fa971 !important;
+        background: rgba(31,169,113,0.12); border: 1px solid rgba(31,169,113,0.3);
+        padding: 0.22rem 0.65rem; border-radius: 999px; margin-bottom: 0.6rem;
+    }
+    .app-subtitle { font-size: 0.88rem; color: #6b6b76 !important; margin-bottom: 1.2rem; line-height: 1.45; }
+    .headline-text { font-size: 1.25rem; font-weight: 800; line-height: 1.35; margin: 0.3rem 0 1.1rem 0; color: #17171a !important; }
 
     .app-card {
-        background: #16161c; border: 1px solid #222229; border-radius: 18px;
+        background: #ffffff; border: 1px solid #ebebe6; border-radius: 18px;
         padding: 1.2rem 1.3rem; margin-bottom: 1rem;
+        box-shadow: 0 10px 24px -16px rgba(20,20,15,0.18);
     }
-    .app-card-title { font-weight: 700; font-size: 0.95rem; color: #ececf1 !important; margin-bottom: 0.7rem; }
+    /* Streamlit st.container(border=True, key="card_...") wraps real widgets (radio,
+       text_area, buttons) that can't live inside a raw markdown div — st-key-card_*
+       is Streamlit's own stable class for that container, restyled to match .app-card */
+    div[class*="st-key-card_"] {
+        background: #ffffff !important; border: 1px solid #ebebe6 !important;
+        border-radius: 18px !important; padding: 1.2rem 1.3rem !important;
+        box-shadow: 0 10px 24px -16px rgba(20,20,15,0.18);
+    }
+    .app-card-title { font-weight: 700; font-size: 0.95rem; color: #17171a !important; margin-bottom: 0.7rem; }
     .section-label {
         font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em;
-        color: #6d6d78 !important; margin: 1.1rem 0 0.6rem 0;
+        color: #8a8a92 !important; margin: 1.1rem 0 0.6rem 0;
     }
 
     div[role="radiogroup"] { gap: 0.5rem; }
-    div[role="radiogroup"] label { color: #ececf1 !important; }
+    div[role="radiogroup"] label { color: #17171a !important; }
 
     .stButton > button {
-        border-radius: 12px !important; font-weight: 600 !important; border: 1px solid #26262f !important;
-        background: #1b1b22 !important; color: #c9c9d2 !important;
+        border-radius: 12px !important; font-weight: 600 !important; border: 1px solid #e4e4de !important;
+        background: #ffffff !important; color: #3a3a42 !important;
     }
-    .stButton > button:hover { border-color: #6d5bd0 !important; color: #ffffff !important; }
-    .stButton > button[kind="primary"] { background: #6d5bd0 !important; color: #ffffff !important; border: none !important; }
-    .stButton > button[kind="primary"]:hover { background: #7c6bdb !important; color: #ffffff !important; }
-    .stButton > button:disabled { background: #1b1b22 !important; color: #4b4b54 !important; border: 1px solid #222229 !important; }
+    .stButton > button:hover { border-color: #1fa971 !important; color: #148a5c !important; }
+    .stButton > button[kind="primary"] { background: #1fa971 !important; color: #ffffff !important; border: none !important; }
+    .stButton > button[kind="primary"]:hover { background: #17925f !important; color: #ffffff !important; }
+    .stButton > button:disabled { background: #f2f2ef !important; color: #b6b6ae !important; border: 1px solid #e4e4de !important; }
 
-    [data-baseweb="tab-list"] { gap: 0.3rem; background: transparent; border-bottom: 1px solid #222229; }
-    [data-baseweb="tab"] { border-radius: 0 !important; font-weight: 600; color: #8b8b96 !important; }
-    [aria-selected="true"][data-baseweb="tab"] { color: #ffffff !important; border-bottom: 2px solid #6d5bd0 !important; }
+    [data-baseweb="tab-list"] { gap: 0.3rem; background: transparent; border-bottom: 1px solid #ebebe6; }
+    [data-baseweb="tab"] { border-radius: 0 !important; font-weight: 600; color: #8a8a92 !important; }
+    [aria-selected="true"][data-baseweb="tab"] { color: #17171a !important; border-bottom: 2px solid #1fa971 !important; }
 
-    textarea, input { background: #101014 !important; color: #ececf1 !important; border-color: #26262f !important; border-radius: 12px !important; }
+    textarea, input { background: #fbfbf9 !important; color: #17171a !important; border-color: #e4e4de !important; border-radius: 12px !important; }
 
-    [data-testid="stExpander"] { background: #16161c !important; border: 1px solid #222229 !important; border-radius: 14px !important; }
+    [data-testid="stExpander"] { background: #ffffff !important; border: 1px solid #ebebe6 !important; border-radius: 14px !important; }
+    [data-testid="stPopoverBody"] { background: #ffffff !important; border-radius: 16px !important; }
 
     /* ---------- MENU FILLESTAR ---------- */
+    .hero-card {
+        background: linear-gradient(135deg, #1fa971 0%, #17925f 100%); border-radius: 22px;
+        padding: 1.7rem 1.5rem; margin-bottom: 1.1rem; box-shadow: 0 14px 30px -16px rgba(31,169,113,0.55);
+        color: #ffffff !important;
+    }
+    .hero-card * { color: #ffffff !important; }
+    .hero-icon { width: 46px; height: 46px; border-radius: 13px; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; margin-bottom: 0.7rem; }
+    .hero-title { font-weight: 800; font-size: 1.15rem; margin-bottom: 0.2rem; }
+    .hero-desc { font-size: 0.84rem; opacity: 0.92; line-height: 1.4; }
+    div[class*="st-key-hero_btn"] button {
+        background: #ffffff !important; color: #148a5c !important; font-weight: 700 !important; border: none !important;
+        margin-top: 0.9rem !important;
+    }
+    div[class*="st-key-hero_btn"] button:hover { background: #f2f2ef !important; color: #0f6f49 !important; }
+
     .menu-card {
-        background: #16161c; border: 1px solid #222229; border-radius: 20px;
-        padding: 1.5rem 1.4rem; margin-bottom: 1rem; display: flex; gap: 1rem; align-items: center;
-        cursor: pointer;
+        background: #ffffff; border: 1px solid #ebebe6; border-radius: 18px;
+        padding: 1.1rem 1.2rem; margin-bottom: 0.7rem; display: flex; gap: 0.9rem; align-items: center;
+        box-shadow: 0 8px 20px -16px rgba(20,20,15,0.15);
     }
     .menu-icon {
-        flex-shrink: 0; width: 52px; height: 52px; border-radius: 14px; background: rgba(109,91,208,0.16);
-        color: #a99bf0; display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px; background: rgba(42,120,214,0.12);
+        color: #2a78d6; display: flex; align-items: center; justify-content: center;
     }
-    .menu-title { font-weight: 700; font-size: 1.05rem; margin-bottom: 0.2rem; }
-    .menu-desc { font-size: 0.82rem; color: #8b8b96 !important; line-height: 1.4; }
+    .menu-icon.good { background: rgba(31,169,113,0.14); color: #1fa971; }
+    .menu-title { font-weight: 700; font-size: 0.98rem; margin-bottom: 0.15rem; color: #17171a !important; }
+    .menu-desc { font-size: 0.8rem; color: #6b6b76 !important; line-height: 1.35; }
+    .menu-badge {
+        display: inline-block; font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.03em; color: #1fa971 !important; background: rgba(31,169,113,0.14);
+        padding: 0.08rem 0.5rem; border-radius: 999px; margin-left: 0.4rem; vertical-align: middle;
+    }
+
+    /* ---------- MENU/PROFILE DROPDOWN ---------- */
+    div[class*="st-key-nav_"] button {
+        justify-content: flex-start !important; background: transparent !important; border: none !important;
+        padding: 0.5rem 0.2rem !important; font-weight: 600 !important; color: #3a3a42 !important;
+    }
+    div[class*="st-key-nav_"] button:hover { color: #1fa971 !important; }
 
     /* ---------- 4 GAUGE SCORE CARDS ---------- */
-    .score-row { display: flex; gap: 0.6rem; margin: 0.2rem 0 1rem 0; }
-    .score-card { flex: 1; background: #16161c; border: 1px solid #222229; border-radius: 16px; padding: 0.85rem 0.4rem; text-align: center; }
-    .score-card-label { font-size: 0.72rem; color: #9b9ba6 !important; font-weight: 600; margin-bottom: 0.6rem; }
-    .score-gauge { width: 60px; height: 60px; border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center; }
-    .score-gauge-inner { width: 48px; height: 48px; border-radius: 50%; background: #16161c; display: flex; align-items: center; justify-content: center; }
+    .score-row { display: flex; gap: 0.55rem; margin: 0.2rem 0 1rem 0; }
+    .score-card { flex: 1; background: #ffffff; border: 1px solid #ebebe6; border-radius: 16px; padding: 0.8rem 0.35rem; text-align: center; box-shadow: 0 8px 20px -16px rgba(20,20,15,0.15); }
+    .score-card-label { font-size: 0.68rem; color: #6b6b76 !important; font-weight: 600; margin-bottom: 0.35rem; }
+    .score-card-value { font-size: 1.05rem; font-weight: 800; margin-bottom: 0.5rem; }
+    .score-gauge { width: 52px; height: 52px; border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center; }
+    .score-gauge-inner { width: 42px; height: 42px; border-radius: 50%; background: #ffffff; display: flex; align-items: center; justify-content: center; }
+
+    /* ---------- BIAS / FAIRNESS / METRIKA (3 KUTI) ---------- */
+    .bf-row { display: flex; gap: 0.55rem; margin-bottom: 0.5rem; }
+    .bf-card { flex: 1; background: #ffffff; border: 1px solid #ebebe6; border-radius: 16px; padding: 0.75rem 0.55rem; text-align: center; box-shadow: 0 8px 20px -16px rgba(20,20,15,0.15); }
+    .bf-card-label { font-size: 0.64rem; color: #6b6b76 !important; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; margin-bottom: 0.4rem; }
+    .bf-card-value { font-size: 1.2rem; font-weight: 800; margin-bottom: 0.15rem; }
+    .bf-card-sub { font-size: 0.66rem; color: #9a9aa0 !important; line-height: 1.3; }
+    .bf-metrics-list { text-align: left; font-size: 0.72rem; color: #4a4a52 !important; line-height: 1.55; }
+    .bf-metrics-list b { color: #17171a !important; }
 
     /* ---------- KEY FINDINGS / VERIFIED FACTS ---------- */
-    .finding-card { background: #16161c; border: 1px solid #222229; border-radius: 14px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; }
+    .finding-card { background: #ffffff; border: 1px solid #ebebe6; border-radius: 14px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; box-shadow: 0 6px 16px -14px rgba(20,20,15,0.15); }
     .finding-tag {
-        display: inline-block; font-size: 0.66rem; font-weight: 700; text-transform: uppercase;
-        color: #a99bf0 !important; background: rgba(109,91,208,0.16); padding: 0.12rem 0.55rem;
+        display: inline-block; font-size: 0.64rem; font-weight: 700; text-transform: uppercase;
+        color: #2a78d6 !important; background: rgba(42,120,214,0.12); padding: 0.12rem 0.55rem;
         border-radius: 999px; margin-bottom: 0.35rem; letter-spacing: 0.03em;
     }
-    .finding-text { color: #d0d0d8 !important; font-size: 0.88rem; line-height: 1.4; }
+    .finding-text { color: #2c2c33 !important; font-size: 0.87rem; line-height: 1.4; }
 
-    /* ---------- KONTEKST FAIRNESS-I ---------- */
+    /* ---------- KONTEKST FAIRNESS-I (detajet, poshtë kutive) ---------- */
     .fair-badge-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
-    .fair-badge { flex: 1; min-width: 150px; background: #101014; border: 1px solid #222229; border-radius: 14px; padding: 0.7rem 0.85rem; }
-    .fair-badge.flagged { border-color: rgba(239,68,68,0.45); background: rgba(239,68,68,0.06); }
-    .fair-badge-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.03em; color: #8b8b96 !important; font-weight: 700; margin-bottom: 0.25rem; }
-    .fair-badge-group { font-size: 0.95rem; font-weight: 700; color: #ececf1 !important; margin-bottom: 0.3rem; }
-    .fair-badge-stat { font-size: 0.78rem; color: #b3b3bc !important; line-height: 1.35; }
-    .fair-badge-flag { font-size: 0.72rem; color: #fca5a5 !important; font-weight: 600; margin-top: 0.3rem; }
-    .fair-note { font-size: 0.76rem; color: #6d6d78 !important; line-height: 1.5; margin-top: 0.6rem; }
-    .fact-row { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.55rem 0; border-bottom: 1px solid #1e1e26; }
+    .fair-badge { flex: 1; min-width: 150px; background: #fbfbf9; border: 1px solid #ebebe6; border-radius: 14px; padding: 0.7rem 0.85rem; }
+    .fair-badge.flagged { border-color: rgba(224,82,79,0.4); background: rgba(224,82,79,0.06); }
+    .fair-badge-label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.03em; color: #8a8a92 !important; font-weight: 700; margin-bottom: 0.25rem; }
+    .fair-badge-group { font-size: 0.93rem; font-weight: 700; color: #17171a !important; margin-bottom: 0.3rem; }
+    .fair-badge-stat { font-size: 0.76rem; color: #4a4a52 !important; line-height: 1.35; }
+    .fair-badge-flag { font-size: 0.7rem; color: #c23c3a !important; font-weight: 600; margin-top: 0.3rem; }
+    .fair-note { font-size: 0.74rem; color: #8a8a92 !important; line-height: 1.5; margin-top: 0.6rem; }
+    .fact-row { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.55rem 0; border-bottom: 1px solid #efefe9; }
     .fact-row:last-child { border-bottom: none; }
-    .fact-check { flex-shrink: 0; color: #22c55e; margin-top: 0.1rem; }
+    .fact-check { flex-shrink: 0; color: #1fa971; margin-top: 0.1rem; }
 
     /* ---------- DEBATE ---------- */
     .debate-row { display: flex; gap: 0.7rem; margin-bottom: 0.7rem; }
     .debate-avatar { flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; color: #ffffff !important; }
     .debate-bubble { flex: 1; border-radius: 14px; padding: 0.7rem 0.9rem; border: 1px solid; }
-    .debate-bubble.supportive { background: rgba(59,130,246,0.08); border-color: rgba(59,130,246,0.25); }
-    .debate-bubble.critical { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.25); }
+    .debate-bubble.supportive { background: rgba(42,120,214,0.08); border-color: rgba(42,120,214,0.25); }
+    .debate-bubble.critical { background: rgba(224,82,79,0.08); border-color: rgba(224,82,79,0.25); }
     .debate-author { font-weight: 700; font-size: 0.8rem; margin-bottom: 0.15rem; }
-    .debate-bubble.supportive .debate-author { color: #93c5fd !important; }
-    .debate-bubble.critical .debate-author { color: #fca5a5 !important; }
-    .debate-text { color: #d0d0d8 !important; font-size: 0.86rem; line-height: 1.4; }
+    .debate-bubble.supportive .debate-author { color: #2a78d6 !important; }
+    .debate-bubble.critical .debate-author { color: #c23c3a !important; }
+    .debate-text { color: #2c2c33 !important; font-size: 0.86rem; line-height: 1.4; }
 
     /* ---------- VERDICT ---------- */
-    .final-verdict-card { background: #16161c; border: 1px solid rgba(109,91,208,0.4); border-radius: 16px; padding: 1.1rem 1.2rem; margin-top: 0.3rem; }
-    .final-verdict-title { font-weight: 700; font-size: 0.95rem; color: #a99bf0 !important; margin-bottom: 0.6rem; display: flex; align-items: center; gap: 0.4rem; }
-    .final-verdict-text { color: #ececf1 !important; font-size: 0.9rem; line-height: 1.55; }
+    .final-verdict-card { background: #ffffff; border: 1px solid rgba(31,169,113,0.4); border-radius: 16px; padding: 1.1rem 1.2rem; margin-top: 0.3rem; box-shadow: 0 10px 24px -16px rgba(20,20,15,0.18); }
+    .final-verdict-title { font-weight: 700; font-size: 0.95rem; color: #148a5c !important; margin-bottom: 0.6rem; display: flex; align-items: center; gap: 0.4rem; }
+    .final-verdict-text { color: #17171a !important; font-size: 0.9rem; line-height: 1.55; }
 
-    .disclaimer { font-size: 0.75rem; color: #55555f !important; text-align: center; margin-top: 1.4rem; line-height: 1.4; }
+    .disclaimer { font-size: 0.74rem; color: #a5a5ac !important; text-align: center; margin-top: 1.4rem; line-height: 1.4; }
+
+    /* ---------- CHARTS (Drejtësia & Bias-i) ---------- */
+    .chart-card {
+        background: #ffffff; border: 1px solid #ebebe6; border-radius: 18px;
+        padding: 1rem 1rem 0.4rem 1rem; margin-bottom: 1rem; box-shadow: 0 10px 24px -16px rgba(20,20,15,0.18);
+    }
+    .chart-card img { border-radius: 10px; width: 100%; }
+    .chart-caption { font-size: 0.8rem; color: #6b6b76 !important; line-height: 1.45; padding: 0.6rem 0.2rem 0.9rem 0.2rem; }
+    .stat-pill-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+    .stat-pill { background: #ffffff; border: 1px solid #ebebe6; border-radius: 12px; padding: 0.55rem 0.8rem; flex: 1; min-width: 130px; box-shadow: 0 6px 16px -14px rgba(20,20,15,0.15); }
+    .stat-pill-value { font-size: 1.15rem; font-weight: 800; color: #17171a !important; }
+    .stat-pill-label { font-size: 0.7rem; color: #6b6b76 !important; margin-top: 0.1rem; }
 
     /* ---------- CHAT ---------- */
-    [data-testid="stChatMessage"] { background: #16161c !important; border: 1px solid #222229 !important; border-radius: 14px !important; }
+    [data-testid="stChatMessage"] { background: #ffffff !important; border: 1px solid #ebebe6 !important; border-radius: 14px !important; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -496,10 +629,10 @@ st.markdown(
 def gauge_color(pct: float, invert: bool = False) -> str:
     v = (100 - pct) if invert else pct
     if v >= 70:
-        return "#22c55e"
+        return "#1fa971"
     if v >= 40:
-        return "#f59e0b"
-    return "#ef4444"
+        return "#e2a63a"
+    return "#e0524f"
 
 
 def fair_badge(label: str, group: str, stats: dict, overall_fnr: float) -> str:
@@ -508,28 +641,78 @@ def fair_badge(label: str, group: str, stats: dict, overall_fnr: float) -> str:
     flag_html = (
         f'<div class="fair-badge-flag">⚠ FNR/FPR ≥1,5× mesatares dataset-it</div>' if flagged else ""
     )
-    return f"""
-    <div class="{cls}">
+    html = f"""<div class="{cls}">
         <div class="fair-badge-label">{label}</div>
         <div class="fair-badge-group">{group}</div>
         <div class="fair-badge-stat">Recall: {stats['recall']:.1f}% · FPR: {stats['fpr']:.1f}% · FNR: {stats['fnr']:.1f}%</div>
         <div class="fair-badge-stat">(n={stats['n']} në pool-in e auditimit · mesatarja e dataset-it: FNR {overall_fnr:.1f}%)</div>
         {flag_html}
-    </div>
-    """
+    </div>"""
+    # Shih shënimin te _score_card_html: rrafshohet për t'u siguruar që 2 karta të
+    # bashkuara (fair_badge(...) + fair_badge(...)) nuk lënë rresht bosh mes tyre.
+    return re.sub(r"\s+", " ", html).strip()
 
 
-def score_card(label: str, icon_svg: str, pct: float, invert: bool = False):
+def _score_card_html(label: str, icon_svg: str, pct: float, invert: bool = False) -> str:
     color = gauge_color(pct, invert=invert)
     deg = max(0, min(100, pct)) * 3.6
-    st.markdown(
-        f"""
-        <div class="score-card">
+    html = f"""<div class="score-card">
             <div class="score-card-label">{label}</div>
-            <div class="score-gauge" style="background: conic-gradient({color} {deg}deg, #24242c 0deg);">
+            <div class="score-card-value" style="color:{color};">{pct:.0f}%</div>
+            <div class="score-gauge" style="background: conic-gradient({color} {deg}deg, #ebebe6 0deg);">
                 <div class="score-gauge-inner" style="color:{color};">{icon_svg}</div>
             </div>
-            <div style="margin-top:0.4rem; font-weight:800; font-size:0.85rem; color:{color};">{pct:.0f}%</div>
+        </div>"""
+    # Rrafshohet në 1 rresht: një rresht bosh mes 2 blloqesh HTML e ndërpret bllokun
+    # raw-HTML te CommonMark dhe pjesa pas tij bie në kod (indentim >=4 hapësira) —
+    # shihet konkretisht kur bashkohen disa karta në 1 thirrje të vetme st.markdown.
+    return re.sub(r"\s+", " ", html).strip()
+
+
+def render_score_row(items: list):
+    """Rendon kutitë e score-it (Truth Score, Besueshmëri, Konsensus, Ndikim) si NJË
+    div flex në një thirrje të vetme st.markdown — jo me st.columns, sepse Streamlit
+    i palos kolonat vertikalisht në gjerësi telefoni (shih shënimin te CSS më sipër)."""
+    cards_html = "".join(_score_card_html(*item) for item in items)
+    st.markdown(f'<div class="score-row">{cards_html}</div>', unsafe_allow_html=True)
+
+
+_TOPIC_AVG_RECALL = sum(v["recall"] for v in FAIRNESS_TOPIC.values()) / len(FAIRNESS_TOPIC)
+
+
+def bias_fairness_row(fairness: dict):
+    """3 kuti koncize: Bias, Fairness, Metrika të tjera — kontekst nga auditi i Kreut 4.7,
+    jo bias/fairness i vetë këtij 1 artikulli (shih shënimin metodologjik më poshtë)."""
+    topic_stats = fairness["topic_stats"]
+    style_stats = fairness["style_stats"]
+
+    bias_risk = max(topic_stats["fnr"], style_stats["fnr"])
+    bias_color = gauge_color(bias_risk, invert=True)
+
+    fairness_pct = max(0.0, min(100.0, 100 - abs(topic_stats["recall"] - _TOPIC_AVG_RECALL)))
+    fairness_color = gauge_color(fairness_pct)
+
+    st.markdown(
+        f"""
+        <div class="bf-row">
+            <div class="bf-card">
+                <div class="bf-card-label">Bias</div>
+                <div class="bf-card-value" style="color:{bias_color};">{bias_risk:.1f}%</div>
+                <div class="bf-card-sub">FNR e grupit "{fairness['topic']}"/"{fairness['style']}"</div>
+            </div>
+            <div class="bf-card">
+                <div class="bf-card-label">Fairness</div>
+                <div class="bf-card-value" style="color:{fairness_color};">{fairness_pct:.0f}%</div>
+                <div class="bf-card-sub">Përputhje me mesataren e temave</div>
+            </div>
+            <div class="bf-card">
+                <div class="bf-card-label">Metrika</div>
+                <div class="bf-metrics-list">
+                    <b>n</b> = {FAIRNESS_OVERALL['n']}<br/>
+                    FPR dataset: <b>{FAIRNESS_OVERALL['fpr']:.1f}%</b><br/>
+                    FNR dataset: <b>{FAIRNESS_OVERALL['fnr']:.1f}%</b>
+                </div>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -548,37 +731,75 @@ def go_to(page_name):
     st.rerun()
 
 
-def top_bar(current_title: str):
-    c1, c2 = st.columns([1, 6])
-    with c1:
-        if st.button("←", key="back_btn"):
-            go_to("menu")
-    with c2:
-        st.markdown(f'<div class="app-title" style="margin-top:0.3rem;">{current_title}</div>', unsafe_allow_html=True)
+NAV_ITEMS = [
+    ("menu", "🏠  Ballina"),
+    ("analysis", "🔎  Analizo Lajm"),
+    ("findings", "⚖️  Drejtësia & Bias-i"),
+    ("chat", "💬  Verifikimi AI"),
+]
+
+
+def top_bar(current_title: str = None):
+    """Shiriti sipër: hamburger (majtas, hap menunë e navigimit), titulli i app-it i qendërzuar,
+    dhe ikona e profilit (djathtas, hap një kartë të shkurtër 'Rreth'). Ikonat janë 'ngjitur'
+    me CSS te cepat e block-container-it (shih .st-key-iconbtn_* më sipër) në vend që të
+    përdorin st.columns, sepse kolonat e Streamlit-it sillen në mënyrë të paqëndrueshme
+    në gjerësi telefoni (444px) kur detyrohen horizontale."""
+    with st.popover("☰", use_container_width=False, key="iconbtn_menu"):
+        for page_key, page_label in NAV_ITEMS:
+            if st.button(page_label, key=f"nav_{page_key}", use_container_width=True):
+                go_to(page_key)
+    with st.popover(ICON_USER_TXT, use_container_width=False, key="iconbtn_profile"):
+        st.markdown(f"**{APP_TITLE}**")
+        st.caption("Prototip praktik i diplomës — Evaluating Bias and Fairness of Multilingual Models on Albanian Fake News.")
+        st.caption(f"Autore: Almira Mecaj · Modele: {', '.join(MODELS.keys())}")
+
+    title_html = f'<span class="accent">{APP_TITLE[-2:]}</span>'.join([APP_TITLE[:-2], ""]) if len(APP_TITLE) > 2 else APP_TITLE
+    st.markdown(
+        f'<div class="app-title" style="text-align:center; margin-top:0.35rem;">{title_html}</div>',
+        unsafe_allow_html=True,
+    )
+    if current_title:
+        st.markdown(f'<div class="section-label" style="margin-top:0.3rem;">{current_title}</div>', unsafe_allow_html=True)
+
+
+ICON_USER_TXT = "👤"
 
 
 # ---------------------------------------------------------------------------
 # FAQJA: MENU
 # ---------------------------------------------------------------------------
 if st.session_state["page"] == "menu":
+    top_bar()
+
     st.markdown(
-        f"""
-        <div class="app-title">{APP_TITLE}</div>
-        <div class="app-subtitle">Zbulues i lajmeve të rreme në shqip — prototip praktik i punimit të diplomës
-        "Evaluating Bias and Fairness of Multilingual Models on Albanian Fake News".</div>
-        """,
+        '<div class="app-subtitle" style="margin-top:0.3rem;">Zbulues i lajmeve të rreme në shqip — prototip praktik i punimit të diplomës '
+        '"Evaluating Bias and Fairness of Multilingual Models on Albanian Fake News".</div>',
         unsafe_allow_html=True,
     )
 
+    # ---------- KOMANDA KRYESORE: ANALIZO LAJM ----------
     st.markdown(
-        f"""<div class="menu-card"><div class="menu-icon">{ICON_ANALYSIS}</div>
-        <div><div class="menu-title">Analizë e Detajuar</div>
-        <div class="menu-desc">Ngjit një lajm ose link dhe merr Truth Score, Besueshmëri, Konsensus, Ndikim, gjetje kryesore dhe verdikt final.</div>
+        f"""<div class="hero-card"><div class="hero-icon">{ICON_ANALYSIS}</div>
+        <div class="hero-title">Analizo Lajm</div>
+        <div class="hero-desc">Ngjit një lajm ose link dhe merr Truth Score, kontekst fairness-i sipas temës/stilit, gjetje kryesore dhe verdikt final.</div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+    if st.button("Analizo Lajm →", use_container_width=True, type="primary", key="hero_btn_analysis"):
+        go_to("analysis")
+
+    st.markdown('<div class="section-label">Më Shumë</div>', unsafe_allow_html=True)
+
+    st.markdown(
+        f"""<div class="menu-card"><div class="menu-icon good">{ICON_SCALE_LG}</div>
+        <div><div class="menu-title">Drejtësia &amp; Bias-i i Modelit<span class="menu-badge">Kërkimi</span></div>
+        <div class="menu-desc">Rezultatet reale të auditit të fairness-it nga diploma.</div>
         </div></div>""",
         unsafe_allow_html=True,
     )
-    if st.button("Hap Analizën", use_container_width=True, type="primary", key="open_analysis"):
-        go_to("analysis")
+    if st.button("Hap Drejtësinë & Bias-in", use_container_width=True, key="open_findings"):
+        go_to("findings")
 
     st.markdown(
         f"""<div class="menu-card"><div class="menu-icon">{ICON_CHAT}</div>
@@ -589,9 +810,6 @@ if st.session_state["page"] == "menu":
     )
     if st.button("Hap Verifikimin AI", use_container_width=True, key="open_chat"):
         go_to("chat")
-
-    if st.button("Gjetjet e Kërkimit (Diplomë)", use_container_width=True, key="open_findings"):
-        go_to("findings")
 
     st.markdown(
         '<p class="disclaimer">Prototip akademik për demonstrim, jo mjet i verifikuar për prodhim.</p>',
@@ -604,50 +822,48 @@ if st.session_state["page"] == "menu":
 elif st.session_state["page"] == "analysis":
     top_bar("Analizë e Detajuar")
 
-    st.markdown('<div class="app-card">', unsafe_allow_html=True)
-    st.markdown('<div class="app-card-title">Modeli</div>', unsafe_allow_html=True)
-    model_choice = st.radio("Zgjidh modelin", list(MODELS.keys()), horizontal=True, label_visibility="collapsed")
-    st.caption(f"{MODELS[model_choice]['description']} · saktësi few-shot: {MODELS[model_choice]['accuracy']}")
-    st.markdown('</div>', unsafe_allow_html=True)
+    with st.container(border=True, key="card_model"):
+        st.markdown('<div class="app-card-title">Modeli</div>', unsafe_allow_html=True)
+        model_choice = st.radio("Zgjidh modelin", list(MODELS.keys()), horizontal=True, label_visibility="collapsed")
+        st.caption(f"{MODELS[model_choice]['description']} · saktësi few-shot: {MODELS[model_choice]['accuracy']}")
 
-    st.markdown('<div class="app-card">', unsafe_allow_html=True)
-    st.markdown('<div class="app-card-title">Vendos titullin ose lajmin</div>', unsafe_allow_html=True)
+    with st.container(border=True, key="card_input"):
+        st.markdown('<div class="app-card-title">Vendos titullin ose lajmin</div>', unsafe_allow_html=True)
 
-    ex_cols = st.columns(len(EXAMPLES))
-    for i, (ex_name, ex_text) in enumerate(EXAMPLES.items()):
-        if ex_cols[i].button(ex_name, use_container_width=True):
-            st.session_state["input_text"] = ex_text
-            st.session_state["fetched_text"] = ex_text
+        ex_cols = st.columns(len(EXAMPLES))
+        for i, (ex_name, ex_text) in enumerate(EXAMPLES.items()):
+            if ex_cols[i].button(ex_name, use_container_width=True):
+                st.session_state["input_text"] = ex_text
+                st.session_state["fetched_text"] = ex_text
 
-    input_mode = st.radio("Si do ta japësh lajmin?", ["Ngjit tekstin", "Vendos link (URL)"], horizontal=True, label_visibility="collapsed")
+        input_mode = st.radio("Si do ta japësh lajmin?", ["Ngjit tekstin", "Vendos link (URL)"], horizontal=True, label_visibility="collapsed")
 
-    if input_mode == "Ngjit tekstin":
-        text = st.text_area(
-            "Ngjit tekstin e një lajmi në shqip:",
-            value=st.session_state.get("input_text", ""),
-            height=160,
-            placeholder="Ngjit titullin dhe/ose përmbajtjen e lajmit...",
-            key="text_input_area",
-            label_visibility="collapsed",
-        )
-        source_url = None
-    else:
-        source_url = st.text_input("Vendos linkun e artikullit:", placeholder="https://...", label_visibility="collapsed")
-        if st.button("Merr artikullin"):
-            if not source_url.strip():
-                st.warning("Fut një link para se të vazhdosh.")
-            else:
-                try:
-                    with st.spinner("Duke shkarkuar..."):
-                        fetched = fetch_article_text(source_url.strip())
-                    st.session_state["fetched_text"] = fetched
-                    st.success(f"U morën {len(fetched)} karaktere.")
-                except ValueError as e:
-                    st.error(str(e))
-        text = st.text_area("Teksti i marrë (mund ta redaktosh):", value=st.session_state.get("fetched_text", ""), height=160)
+        if input_mode == "Ngjit tekstin":
+            text = st.text_area(
+                "Ngjit tekstin e një lajmi në shqip:",
+                value=st.session_state.get("input_text", ""),
+                height=160,
+                placeholder="Ngjit titullin dhe/ose përmbajtjen e lajmit...",
+                key="text_input_area",
+                label_visibility="collapsed",
+            )
+            source_url = None
+        else:
+            source_url = st.text_input("Vendos linkun e artikullit:", placeholder="https://...", label_visibility="collapsed")
+            if st.button("Merr artikullin"):
+                if not source_url.strip():
+                    st.warning("Fut një link para se të vazhdosh.")
+                else:
+                    try:
+                        with st.spinner("Duke shkarkuar..."):
+                            fetched = fetch_article_text(source_url.strip())
+                        st.session_state["fetched_text"] = fetched
+                        st.success(f"U morën {len(fetched)} karaktere.")
+                    except ValueError as e:
+                        st.error(str(e))
+            text = st.text_area("Teksti i marrë (mund ta redaktosh):", value=st.session_state.get("fetched_text", ""), height=160)
 
-    analyze = st.button("ANALIZO", type="primary", use_container_width=True, disabled=not text.strip())
-    st.markdown('</div>', unsafe_allow_html=True)
+        analyze = st.button("ANALIZO", type="primary", use_container_width=True, disabled=not text.strip())
 
     if analyze:
         model_path = MODELS[model_choice]["path"]
@@ -681,54 +897,45 @@ elif st.session_state["page"] == "analysis":
 
         with result_tab_analysis:
             st.markdown('<div class="section-label">Rezultatet</div>', unsafe_allow_html=True)
-            st.markdown('<div class="score-row">', unsafe_allow_html=True)
-            cols = st.columns(4)
-            with cols[0]:
-                score_card("Truth Score", ICON_CHECK, truth_pct)
-            with cols[1]:
-                score_card("Besueshmëri", ICON_SHIELD, float(ruling.get("reliability_score", 50)))
-            with cols[2]:
-                score_card("Konsensus", ICON_PEOPLE, float(ruling.get("consensus_score", 50)))
-            with cols[3]:
-                score_card("Ndikim", ICON_BOLT, float(ruling.get("impact_score", 50)), invert=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+            render_score_row([
+                ("Truth Score", ICON_CHECK, truth_pct, False),
+                ("Besueshmëri", ICON_SHIELD, float(ruling.get("reliability_score", 50)), False),
+                ("Konsensus", ICON_PEOPLE, float(ruling.get("consensus_score", 50)), False),
+                ("Ndikim", ICON_BOLT, float(ruling.get("impact_score", 50)), True),
+            ])
 
-            st.markdown('<div class="app-card">', unsafe_allow_html=True)
-            st.markdown('<div class="app-card-title">Përmbledhje</div>', unsafe_allow_html=True)
-            st.markdown(f'<p class="finding-text">{ruling.get("analysis_summary", "")}</p>', unsafe_allow_html=True)
-            st.caption(
-                f"Modeli i përdorur: {model_choice} ({MODELS[model_choice]['description']}) · "
-                f"saktësi few-shot {MODELS[model_choice]['accuracy']} · klasifikim: {label} ({confidence*100:.1f}%)"
-            )
-            st.markdown('</div>', unsafe_allow_html=True)
+            with st.container(border=True, key="card_summary"):
+                st.markdown('<div class="app-card-title">Përmbledhje</div>', unsafe_allow_html=True)
+                st.markdown(f'<p class="finding-text">{ruling.get("analysis_summary", "")}</p>', unsafe_allow_html=True)
+                st.caption(
+                    f"Modeli i përdorur: {model_choice} ({MODELS[model_choice]['description']}) · "
+                    f"saktësi few-shot {MODELS[model_choice]['accuracy']} · klasifikim: {label} ({confidence*100:.1f}%)"
+                )
 
             fairness = result.get("fairness")
             if fairness:
-                st.markdown('<div class="app-card">', unsafe_allow_html=True)
-                st.markdown('<div class="app-card-title">Konteksti i Fairness-it (Kreu 4.7 i punimit)</div>', unsafe_allow_html=True)
-                st.markdown('<div class="fair-badge-row">', unsafe_allow_html=True)
-                badges = fair_badge(
-                    "Tema e zbuluar", fairness["topic"], fairness["topic_stats"], FAIRNESS_OVERALL["fnr"]
-                ) + fair_badge(
-                    "Stili i zbuluar", fairness["style"], fairness["style_stats"], FAIRNESS_OVERALL["fnr"]
-                )
-                st.markdown(badges, unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-                if fairness.get("domain") and fairness.get("domain_accuracy") is not None:
+                with st.container(border=True, key="card_fairness"):
+                    st.markdown('<div class="app-card-title">Bias &amp; Fairness (Kreu 4.7 i punimit)</div>', unsafe_allow_html=True)
+                    bias_fairness_row(fairness)
                     st.markdown(
-                        f'<div class="fair-badge-stat">Burimi <b>{fairness["domain"]}</b> — '
-                        f'accuracy historike: {fairness["domain_accuracy"]:.1f}% '
-                        f'(shih Kreu 4.7.3; jo EOG, thjesht accuracy përshkrues).</div>',
+                        '<div class="fair-note">Kontekst nga auditi i diplomës mbi 1.192 artikuj — jo bias/fairness i vetë '
+                        'këtij 1 artikulli (EOG/FPR/FNR maten mbi grupe, jo mbi 1 rast).</div>',
                         unsafe_allow_html=True,
                     )
-                st.markdown(
-                    '<div class="fair-note">Këto NUK janë bias/fairness i vetë këtij artikulli — '
-                    'Equal Opportunity Gap/FPR/FNR maten mbi grupe artikujsh, jo mbi 1 rast. '
-                    'Numrat tregojnë si ka performuar historikisht modeli XLM-R few-shot për grupin '
-                    '(temë/stil/burim) ku bie ky artikull, sipas auditit të kryer në Kreun 4.7 të diplomës.</div>',
-                    unsafe_allow_html=True,
-                )
-                st.markdown('</div>', unsafe_allow_html=True)
+                    with st.expander("Detaje sipas grupit (temë/stil/burim)"):
+                        badges_html = fair_badge(
+                            "Tema e zbuluar", fairness["topic"], fairness["topic_stats"], FAIRNESS_OVERALL["fnr"]
+                        ) + fair_badge(
+                            "Stili i zbuluar", fairness["style"], fairness["style_stats"], FAIRNESS_OVERALL["fnr"]
+                        )
+                        st.markdown(f'<div class="fair-badge-row">{badges_html}</div>', unsafe_allow_html=True)
+                        if fairness.get("domain") and fairness.get("domain_accuracy") is not None:
+                            st.markdown(
+                                f'<div class="fair-badge-stat">Burimi <b>{fairness["domain"]}</b> — '
+                                f'accuracy historike: {fairness["domain_accuracy"]:.1f}% '
+                                f'(shih Kreu 4.7.3; jo EOG, thjesht accuracy përshkrues).</div>',
+                                unsafe_allow_html=True,
+                            )
 
             st.markdown('<div class="section-label">Gjetjet Kryesore</div>', unsafe_allow_html=True)
             for finding in ruling.get("key_findings", []):
@@ -747,14 +954,14 @@ elif st.session_state["page"] == "analysis":
             crit_initial = (crit.get("author") or "?")[:1].upper()
             st.markdown(
                 f"""<div class="debate-row">
-                    <div class="debate-avatar" style="background:#3b82f6;">{sup_initial}</div>
+                    <div class="debate-avatar" style="background:#2a78d6;">{sup_initial}</div>
                     <div class="debate-bubble supportive">
                         <div class="debate-author">{sup.get('author','')}</div>
                         <div class="debate-text">{sup.get('text','')}</div>
                     </div>
                 </div>
                 <div class="debate-row">
-                    <div class="debate-avatar" style="background:#ef4444;">{crit_initial}</div>
+                    <div class="debate-avatar" style="background:#e0524f;">{crit_initial}</div>
                     <div class="debate-bubble critical">
                         <div class="debate-author">{crit.get('author','')}</div>
                         <div class="debate-text">{crit.get('text','')}</div>
@@ -777,10 +984,10 @@ elif st.session_state["page"] == "analysis":
                 st.text(result["text"][:1500])
 
             verdict_label = "LAJM I RREMË" if label == "FAKE" else "LAJM I BESUESHËM"
-            verdict_color = "#ef4444" if label == "FAKE" else "#22c55e"
+            verdict_color = "#e0524f" if label == "FAKE" else "#1fa971"
             st.markdown(
                 f"""
-                <div class="final-verdict-card">
+                <div class="final-verdict-card" style="border-color:{verdict_color}66;">
                     <div class="final-verdict-title" style="color:{verdict_color} !important;">
                         {ICON_SCALE} {verdict_label} · Truth Score {truth_pct:.0f}%
                     </div>
@@ -836,45 +1043,53 @@ elif st.session_state["page"] == "chat":
 # FAQJA: GJETJET E KERKIMIT (permbajtje akademike)
 # ---------------------------------------------------------------------------
 elif st.session_state["page"] == "findings":
-    top_bar("Gjetjet e Kërkimit")
-
-    st.markdown('<div class="app-card">', unsafe_allow_html=True)
-    st.markdown('<div class="app-card-title">Përmbledhje e eksperimenteve</div>', unsafe_allow_html=True)
+    top_bar("Drejtësia & Bias-i i Modelit")
     st.markdown(
-        "Katër modele (bazë TF-IDF+Logistic Regression, mBERT, XLM-R, mT5) u testuan në dy skenarë: "
-        "**zero-shot** (trajnim vetëm në anglisht, testim në shqip) dhe **few-shot** "
-        "(trajnim anglisht + 2,772 shembuj shqip)."
+        '<p class="app-subtitle">Rezultatet e mëposhtme vijnë drejtpërdrejt nga auditi i fairness-it '
+        'i kryer në punimin e diplomës (Kreu III–IV), mbi 1.192 artikuj shqip. Nuk janë ilustrime — '
+        'janë gjetjet reale që qëndrojnë pas kontekstit të fairness-it që sheh te Analiza e Detajuar.</p>',
+        unsafe_allow_html=True,
     )
-    results_df = pd.DataFrame({
-        "Model": ["Baseline (TF-IDF+LR)", "mBERT", "XLM-R", "mT5"],
-        "Zero-shot (AL)": [None, 67.2, 50.0, 64.8],
-        "Few-shot (AL)": [89.6, 91.1, 95.5, 91.6],
-    })
-    st.dataframe(results_df, hide_index=True, use_container_width=True)
-    st.caption("Vlerat në % (accuracy mbi 594 artikuj testimi shqip).")
-    st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="app-card">', unsafe_allow_html=True)
-    st.markdown('<div class="app-card-title">Bias sipas gjatësisë së artikullit</div>', unsafe_allow_html=True)
-    st.caption("XLM-R, model few-shot")
     st.markdown(
-        "Artikujt shqip u ndanë në tre grupe sipas numrit të fjalëve. Modeli gabon "
-        "dukshëm më shumë (False Negative Rate më e lartë) te artikujt e gjatë."
+        f"""<div class="stat-pill-row">
+            <div class="stat-pill"><div class="stat-pill-value">95,5%</div><div class="stat-pill-label">Accuracy më e lartë (XLM-R, few-shot)</div></div>
+            <div class="stat-pill"><div class="stat-pill-value">1.192</div><div class="stat-pill-label">Artikuj në pool-in e auditimit</div></div>
+            <div class="stat-pill"><div class="stat-pill-value">Shëndetësi</div><div class="stat-pill-label">Grupi me normën më të lartë gabimi</div></div>
+        </div>""",
+        unsafe_allow_html=True,
     )
-    bias_df = pd.DataFrame({
-        "Grupi": ["Shkurt", "Mesatar", "Gjatë"],
-        "False Negative Rate (%)": [2.76, 6.67, 21.88],
-        "False Positive Rate (%)": [1.79, 2.67, 3.01],
-    }).set_index("Grupi")
-    st.bar_chart(bias_df)
-    st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="app-card">', unsafe_allow_html=True)
-    st.markdown('<div class="app-card-title">Drejtësia ndër-gjuhësore (zero-shot)</div>', unsafe_allow_html=True)
-    st.markdown(
-        "XLM-R duket \"më i drejtë\" sipas Equal Opportunity Gap (0.003), por kjo është "
-        "artificiale — modeli kishte kolapsuar duke parashikuar \"fake\" për çdo artikull. "
-        "mBERT (EOG 0.212) dhe mT5 (EOG 0.488) pasqyrojnë hendekë realë EN→AL."
+    st.markdown('<div class="section-label">Performanca e modeleve</div>', unsafe_allow_html=True)
+    chart_card(
+        "static/charts/accuracy_models.png",
+        "Katër modele (bazë TF-IDF+Logistic Regression, mBERT, XLM-R, mT5) u trajnuan në anglisht dhe u "
+        "rregulluan më tej (<i>few-shot</i>) me 2.772 shembuj shqip. XLM-R doli modeli më i saktë mbi 594 "
+        "artikuj testimi shqip.",
     )
-    st.info("Për detaje të plota metodologjike, shih Kreun III–IV të punimit të diplomës.")
-    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section-label">Drejtësia ndër-gjuhësore (zero-shot, EN→AL)</div>', unsafe_allow_html=True)
+    chart_card(
+        "static/charts/fairness_gjuhesor.png",
+        'Pa asnjë të dhënë shqipe (vetëm transferim nga anglishtja), XLM-R duket "më i drejtë" sipas Equal '
+        'Opportunity Gap (0,003) — por kjo është artificiale: modeli kishte kolapsuar duke parashikuar "fake" '
+        "për çdo artikull. mBERT (EOG 0,212) dhe mT5 (EOG 0,488) pasqyrojnë hendekë realë mes gjuhëve. Kjo është "
+        "arsyeja pse EOG nuk duhet lexuar kurrë i vetëm, pa metrika shoqëruese.",
+    )
+
+    st.markdown('<div class="section-label">Bias sipas gjatësisë së artikullit</div>', unsafe_allow_html=True)
+    chart_card(
+        "static/charts/bias_gjatesia.png",
+        "XLM-R few-shot, artikujt shqip të ndarë në tri grupe sipas numrit të fjalëve. Norma e gabimit (FNR) "
+        "rritet ndjeshëm te artikujt e gjatë — lajmet e rreme të gjata mbeten më shpesh të paidentifikuara.",
+    )
+
+    st.markdown('<div class="section-label">Bias sipas temës — i njëjti kontekst që sheh te Analiza</div>', unsafe_allow_html=True)
+    chart_card(
+        "static/charts/bias_tema.png",
+        "Kategoria <b>Shëndetësi</b> ka recall dukshëm më të ulët se pjesa tjetër — modeli mbështetet shumë te "
+        "fjalori mjekësor i specializuar, më pak i pranishëm gjatë pre-trajnimit. Kjo është pikërisht statistika "
+        "që përdor funksioni <code>fairness_context()</code> për t'i dhënë kontekst çdo analize në kohë reale.",
+    )
+
+    st.info("Për metodologjinë e plotë (si u llogaritën FPR/FNR/EOG dhe kufizimet e tyre), shih Kreun III–IV të punimit të diplomës.")
