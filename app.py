@@ -1081,8 +1081,8 @@ elif st.session_state["page"] == "findings":
     top_bar("Drejtësia & Bias-i i Modelit")
     st.markdown(
         '<p class="app-subtitle">Rezultatet e mëposhtme vijnë drejtpërdrejt nga vlerësimi i fairness-it '
-        'i kryer në punimin e diplomës (Kreu III–IV), mbi 1.192 artikuj shqip. Nuk janë ilustrime — '
-        'janë gjetjet reale që qëndrojnë pas kontekstit të fairness-it që sheh te Analiza e Detajuar.</p>',
+        'i kryer në punimin e diplomës (Kreu III–IV), mbi 1.192 artikuj shqip. Janë gjetjet reale që '
+        'qëndrojnë pas kontekstit të fairness-it që sheh te Analiza e Detajuar.</p>',
         unsafe_allow_html=True,
     )
  
