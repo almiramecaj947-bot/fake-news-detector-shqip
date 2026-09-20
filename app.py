@@ -42,7 +42,7 @@ def _install_pwa_head_tags():
             marker + "\n"
             f'<link rel="manifest" href="{manifest_url}">\n'
             f'<link rel="apple-touch-icon" href="{icon_url}">\n'
-            '<meta name="theme-color" content="#0b0b12">\n'
+            '<meta name="theme-color" content="#0c1712">\n'
             '<meta name="apple-mobile-web-app-capable" content="yes">\n'
             '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">\n'
             '<meta name="apple-mobile-web-app-title" content="TruthNews AL">\n'
