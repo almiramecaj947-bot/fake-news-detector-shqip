@@ -2,7 +2,7 @@
 <html lang="sq">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <title>TruthNews AL</title>
 
   <link rel="manifest" href="static/manifest.json">
@@ -13,25 +13,38 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="TruthNews AL">
 
-  <meta http-equiv="refresh" content="0; url=https://fake-news-detector-shqip-2jjmg6l3uqqjs2mjpg3wkr.streamlit.app/">
-  <script>
-    window.location.replace("https://fake-news-detector-shqip-2jjmg6l3uqqjs2mjpg3wkr.streamlit.app/");
-  </script>
-
   <style>
-    body {
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
       background: #0c1712;
-      color: #ffffff;
-      font-family: -apple-system, system-ui, sans-serif;
+      overflow: hidden;
+    }
+    iframe {
+      border: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #loading {
+      position: fixed;
+      inset: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      height: 100vh;
-      margin: 0;
+      color: #ffffff;
+      font-family: -apple-system, system-ui, sans-serif;
+      background: #0c1712;
     }
   </style>
 </head>
 <body>
-  <p>Duke hapur TruthNews AL…</p>
+  <div id="loading"><p>Duke hapur TruthNews AL…</p></div>
+  <iframe
+    src="https://fake-news-detector-shqip-2jjmg6l3uqqjs2mjpg3wkr.streamlit.app/"
+    allow="clipboard-write; microphone; camera"
+    onload="document.getElementById('loading').style.display='none';"
+  ></iframe>
 </body>
 </html>
