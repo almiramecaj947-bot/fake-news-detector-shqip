@@ -1097,7 +1097,7 @@ elif st.session_state["page"] == "findings":
  
     st.markdown('<div class="section-label">Performanca e modeleve</div>', unsafe_allow_html=True)
     chart_card(
-        "static/charts/accuracy_models.png",
+        "static/accuracy_models.png",
         "Katër modele (bazë TF-IDF+Logistic Regression, mBERT, XLM-R, mT5) u trajnuan në anglisht dhe u "
         "rregulluan më tej (<i>few-shot</i>) me 2.772 shembuj shqip. XLM-R doli modeli më i saktë mbi 594 "
         "artikuj testimi shqip.",
@@ -1105,7 +1105,7 @@ elif st.session_state["page"] == "findings":
  
     st.markdown('<div class="section-label">Drejtësia ndër-gjuhësore (zero-shot, EN→AL)</div>', unsafe_allow_html=True)
     chart_card(
-        "static/charts/fairness_gjuhesor.png",
+        "static/fairness_gjuhesor.png",
         'Pa asnjë të dhënë shqipe (vetëm transferim nga anglishtja), XLM-R duket "më i drejtë" sipas Equal '
         'Opportunity Gap (0,003) — por kjo është artificiale: modeli kishte kolapsuar duke parashikuar "fake" '
         "për çdo artikull. mBERT (EOG 0,212) dhe mT5 (EOG 0,488) pasqyrojnë hendekë realë mes gjuhëve. Kjo është "
@@ -1114,18 +1114,17 @@ elif st.session_state["page"] == "findings":
  
     st.markdown('<div class="section-label">Bias sipas gjatësisë së artikullit</div>', unsafe_allow_html=True)
     chart_card(
-        "static/charts/bias_gjatesia.png",
+        "static/bias_gjatesia.png",
         "XLM-R few-shot, artikujt shqip të ndarë në tri grupe sipas numrit të fjalëve. Norma e gabimit (FNR) "
         "rritet ndjeshëm te artikujt e gjatë — lajmet e rreme të gjata mbeten më shpesh të paidentifikuara.",
     )
  
     st.markdown('<div class="section-label">Bias sipas temës — i njëjti kontekst që sheh te Analiza</div>', unsafe_allow_html=True)
     chart_card(
-        "static/charts/bias_tema.png",
+        "static/bias_tema.png",
         "Kategoria <b>Shëndetësi</b> ka recall dukshëm më të ulët se pjesa tjetër — modeli mbështetet shumë te "
         "fjalori mjekësor i specializuar, më pak i pranishëm gjatë pre-trajnimit. Kjo është pikërisht statistika "
         "që përdor funksioni <code>fairness_context()</code> për t'i dhënë kontekst çdo analize në kohë reale.",
     )
  
     st.info("Për metodologjinë e plotë (si u llogaritën FPR/FNR/EOG dhe kufizimet e tyre), shih Kreun III–IV të punimit të diplomës.")
- 
