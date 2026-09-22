@@ -838,7 +838,7 @@ if st.session_state["page"] == "menu":
     st.markdown(
         f"""<div class="hero-card"><div class="hero-icon">{ICON_ANALYSIS}</div>
         <div class="hero-title">Analizo Lajm</div>
-        <div class="hero-desc">Ngjit një lajm ose link dhe merr Truth Score, kontekst fairness-i sipas temës/stilit, gjetje kryesore dhe verdikt final.</div>
+        <div class="hero-desc">Ngjit një lajm ose link dhe merr Truth Score, kontekst fairness-i sipas temës ose stilit, gjetje kryesore dhe verdikt final.</div>
         </div>""",
         unsafe_allow_html=True,
     )
@@ -871,18 +871,17 @@ elif st.session_state["page"] == "analysis":
     with st.container(border=True, key="card_input"):
         st.markdown('<div class="app-card-title">Vendos titullin ose lajmin</div>', unsafe_allow_html=True)
  
-        ex_cols = st.columns(len(EXAMPLES))
-        for i, (ex_name, ex_text) in enumerate(EXAMPLES.items()):
-            if ex_cols[i].button(ex_name, use_container_width=True):
-                st.session_state["input_text"] = ex_text
-                st.session_state["fetched_text"] = ex_text
+     ex_cols = st.columns(len(EXAMPLES))
+     for i, (ex_name, ex_text) in enumerate(EXAMPLES.items()):
+         if ex_cols[i].button(ex_name, use_container_width=True):
+             st.session_state["text_input_area"] = ex_text
+             st.session_state["fetched_text"] = ex_text
  
         input_mode = st.radio("Si do ta japësh lajmin?", ["Ngjit tekstin", "Vendos link (URL)"], horizontal=True, label_visibility="collapsed")
  
         if input_mode == "Ngjit tekstin":
             text = st.text_area(
-                "Ngjit tekstin e një lajmi në shqip:",
-                value=st.session_state.get("input_text", ""),
+                "Ngjit tekstin e një lajmi në shqip:"
                 height=160,
                 placeholder="Ngjit titullin dhe/ose përmbajtjen e lajmit...",
                 key="text_input_area",
