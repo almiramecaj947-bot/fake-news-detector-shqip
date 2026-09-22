@@ -212,33 +212,36 @@ def fairness_context(text: str, source_url: str = None) -> dict:
         "domain": domain, "domain_accuracy": FAIRNESS_DOMAIN.get(domain) if domain else None,
     }
  
-EXAMPLES = {
-    "Shembull real 1": (
+REAL_EXAMPLES = [
+    (
         "Këshilli Bashkiak i Tiranës miratoi sot buxhetin shtesë prej 2 milionë eurosh për "
         "rikonstruksionin e tre kopshteve në zonën e Astirit. Sipas kryebashkiakut, punimet "
         "parashikohet të përfundojnë brenda gjashtë muajve dhe do të përfshijnë ndërtimin e "
         "hapësirave të reja të gjelbra për fëmijët."
     ),
-    "Shembull real 2": (
+    (
         "Instituti i Statistikave (INSTAT) publikoi të dhënat për muajin gusht, duke raportuar "
         "një rritje prej 3.2% të eksporteve krahasuar me të njëjtën periudhë të vitit të kaluar. "
         "Sektori i tekstileve dhe këpucëve vazhdon të mbetet kontribuesi kryesor në këtë rritje."
     ),
-    "Shembull i rremë 1": (
+]
+
+FAKE_EXAMPLES = [
+    (
         "Kjo është mundësia e ardhjes së mërgimtarëve nga Gjermania. Gazetari i Deutsche "
         "Welle, Bahri Cani, ka folur për mundësitë që kanë kosovarët të cilët jetojnë në "
         "Gjermani për të ardhur drejtë Kosovës për pushime verore. “500 mijë shqiptarë sa "
         "jetojnë në Gjermani dëshirojnë që pushimet e tyre t’i kalojnë në Kosovë, Shqipëri "
         "dhe vendet tjera” — shiko pamjet se si mund të udhëtojnë mërgimtarët për në vendlindje."
     ),
-    "Shembull i rremë 2": (
+    (
         "SHOKUES: Një bimë e thjeshtë që rritet në çdo kopsht shqiptar zhduk plotësisht "
         "DHIMBJET E KYÇEVE brenda 3 ditësh, thonë 'ekspertë'! Mjekët zyrtarë refuzojnë ta "
         "pranojnë sepse humbasin fitimet nga barnat. Provoje vetë dhe SHIKO REZULTATET "
         "menjëherë, mijëra njerëz e kanë ndarë tashmë këtë zbulim para se të FSHIHET nga "
         "interneti!"
     ),
-}
+]
  
 GEMINI_MODEL_CANDIDATES = ["gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-flash-lite-latest"]
  
@@ -924,14 +927,24 @@ elif st.session_state["page"] == "analysis":
     with st.container(border=True, key="card_input"):
         st.markdown('<div class="app-card-title">Vendos titullin ose lajmin</div>', unsafe_allow_html=True)
  
-        example_items = list(EXAMPLES.items())
-        for row_start in range(0, len(example_items), 2):
-            row_pair = example_items[row_start:row_start + 2]
-            row_cols = st.columns(len(row_pair))
-            for col, (ex_name, ex_text) in zip(row_cols, row_pair):
-                if col.button(ex_name, use_container_width=True):
-                    st.session_state["text_input_area"] = ex_text
-                    st.session_state["fetched_text"] = ex_text
+        if "real_ex_idx" not in st.session_state:
+            st.session_state["real_ex_idx"] = 0
+        if "fake_ex_idx" not in st.session_state:
+            st.session_state["fake_ex_idx"] = 0
+
+        ex_col1, ex_col2 = st.columns(2)
+        if ex_col1.button("Shembull real", use_container_width=True):
+            idx = st.session_state["real_ex_idx"] % len(REAL_EXAMPLES)
+            ex_text = REAL_EXAMPLES[idx]
+            st.session_state["text_input_area"] = ex_text
+            st.session_state["fetched_text"] = ex_text
+            st.session_state["real_ex_idx"] = idx + 1
+        if ex_col2.button("Shembull i rremë", use_container_width=True):
+            idx = st.session_state["fake_ex_idx"] % len(FAKE_EXAMPLES)
+            ex_text = FAKE_EXAMPLES[idx]
+            st.session_state["text_input_area"] = ex_text
+            st.session_state["fetched_text"] = ex_text
+            st.session_state["fake_ex_idx"] = idx + 1
  
         input_mode = st.radio("Si do ta japësh lajmin?", ["Ngjit tekstin", "Vendos link (URL)"], horizontal=True, label_visibility="collapsed")
  
