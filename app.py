@@ -94,6 +94,7 @@ def _install_swipe_menu():
         <script>
         (function() {
             var doc = window.parent.document;
+            var win = window.parent;
             if (doc.__truthnewsSwipeInstalled) return;
             doc.__truthnewsSwipeInstalled = true;
 
@@ -101,6 +102,38 @@ def _install_swipe_menu():
 
             function isTypingTarget(el) {
                 return el && el.closest && el.closest('textarea, input, [contenteditable="true"]');
+            }
+
+            function findMenuButton() {
+                var scoped = doc.querySelector('div[class*="st-key-iconbtn_menu"] button');
+                if (scoped) return scoped;
+                var all = Array.prototype.slice.call(doc.querySelectorAll('button'));
+                return all.find(function(b) { return (b.textContent || '').trim() === '☰'; }) || null;
+            }
+
+            function fireClick(el) {
+                var rect = el.getBoundingClientRect();
+                var cx = rect.left + rect.width / 2;
+                var cy = rect.top + rect.height / 2;
+                var opts = { bubbles: true, cancelable: true, composed: true, clientX: cx, clientY: cy, view: win };
+                ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function(type) {
+                    try {
+                        var Ctor = type.indexOf('pointer') === 0 ? win.PointerEvent : win.MouseEvent;
+                        el.dispatchEvent(new Ctor(type, opts));
+                    } catch (err) {
+                        el.dispatchEvent(new win.MouseEvent(type, opts));
+                    }
+                });
+            }
+
+            function showBanner(text, ok) {
+                var b = doc.createElement('div');
+                b.textContent = text;
+                b.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);' +
+                    'z-index:99999;padding:6px 14px;border-radius:8px;font-size:13px;font-family:sans-serif;' +
+                    'color:#fff;background:' + (ok ? '#1fa971' : '#d9534f') + ';box-shadow:0 2px 8px rgba(0,0,0,.25);';
+                doc.body.appendChild(b);
+                setTimeout(function() { b.remove(); }, 1400);
             }
 
             doc.addEventListener('touchstart', function(e) {
@@ -121,8 +154,13 @@ def _install_swipe_menu():
                 var horizontalEnough = Math.abs(dx) > Math.abs(dy) * 1.5;
                 var swipedLeft = dx < -70;
                 if (horizontalEnough && swipedLeft) {
-                    var btn = doc.querySelector('div[class*="st-key-iconbtn_menu"] button');
-                    if (btn) btn.click();
+                    var btn = findMenuButton();
+                    if (btn) {
+                        fireClick(btn);
+                        showBanner('Swipe u zbulua — po hap menune', true);
+                    } else {
+                        showBanner('Swipe u zbulua, por s\\'u gjet butoni ☰', false);
+                    }
                 }
             }, { passive: true });
         })();
