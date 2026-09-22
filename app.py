@@ -17,7 +17,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import torch
 import trafilatura
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoModelForSeq2SeqLM
  
 APP_TITLE = "TruthNews AL"
  
@@ -94,11 +94,19 @@ MODELS = {
         "path": "almira123/xlmr-albanian-fake-news",
         "description": "xlm-roberta-base — fine-tuned EN + AL",
         "accuracy": "95.5%",
+        "type": "classifier",
     },
     "mBERT": {
         "path": "almira123/mbert-albanian-fake-news",
         "description": "bert-base-multilingual-cased — fine-tuned EN + AL",
         "accuracy": "91.1%",
+        "type": "classifier",
+    },
+    "mT5": {
+        "path": "almira123/mt5-albanian-fake-news",
+        "description": "mt5-small — model teksti-në-tekst (generative), fine-tuned EN + AL",
+        "accuracy": "shih Kreu 4.7",
+        "type": "seq2seq",
     },
 }
 LABELS = {0: "REAL", 1: "FAKE"}
@@ -344,21 +352,44 @@ def gemini_chat_reply(history: list) -> str:
 # MODELI KLASIFIKUES
 # ---------------------------------------------------------------------------
 @st.cache_resource(show_spinner="Duke ngarkuar modelin...")
-def load_model(model_path: str):
+def load_model(model_path: str, model_type: str = "classifier"):
     tokenizer = AutoTokenizer.from_pretrained(model_path)
-    model = AutoModelForSequenceClassification.from_pretrained(model_path)
+    if model_type == "seq2seq":
+        model = AutoModelForSeq2SeqLM.from_pretrained(model_path)
+    else:
+        model = AutoModelForSequenceClassification.from_pretrained(model_path)
     model.eval()
     return tokenizer, model
- 
- 
-def predict(text: str, model_path: str):
-    tokenizer, model = load_model(model_path)
+
+
+def predict(text: str, model_path: str, model_type: str = "classifier"):
+    tokenizer, model = load_model(model_path, model_type)
+    if model_type == "seq2seq":
+        return predict_seq2seq(text, tokenizer, model)
     inputs = tokenizer(text, truncation=True, padding=True, max_length=256, return_tensors="pt")
     with torch.no_grad():
         logits = model(**inputs).logits
         probs = torch.softmax(logits, dim=1)[0]
     pred_id = int(torch.argmax(probs))
     return LABELS.get(pred_id, str(pred_id)), float(probs[pred_id]), probs.tolist()
+
+
+def predict_seq2seq(text: str, tokenizer, model):
+    """mT5 (teksti-në-tekst): skoron probabilitetin e fjalës 'real' kundrejt 'fake'
+    si target i detyruar, në vend të gjenerimit të lirë — jep një shpërndarje
+    probabilitetesh të qëndrueshme mbi të dyja klasat."""
+    inputs = tokenizer(text, truncation=True, max_length=256, return_tensors="pt")
+    scores = {}
+    for word in ("real", "fake"):
+        target = tokenizer(word, return_tensors="pt").input_ids
+        with torch.no_grad():
+            out = model(**inputs, labels=target)
+        scores[word] = -out.loss.item()
+    probs = torch.softmax(torch.tensor([scores["real"], scores["fake"]]), dim=0)
+    pred_word = "real" if probs[0] >= probs[1] else "fake"
+    label = "REAL" if pred_word == "real" else "FAKE"
+    confidence = float(probs[0] if pred_word == "real" else probs[1])
+    return label, confidence, probs.tolist()
  
  
 def fetch_article_text(url: str) -> str:
@@ -871,17 +902,17 @@ elif st.session_state["page"] == "analysis":
     with st.container(border=True, key="card_input"):
         st.markdown('<div class="app-card-title">Vendos titullin ose lajmin</div>', unsafe_allow_html=True)
  
-     ex_cols = st.columns(len(EXAMPLES))
-     for i, (ex_name, ex_text) in enumerate(EXAMPLES.items()):
-         if ex_cols[i].button(ex_name, use_container_width=True):
-             st.session_state["text_input_area"] = ex_text
-             st.session_state["fetched_text"] = ex_text
+        ex_cols = st.columns(len(EXAMPLES))
+        for i, (ex_name, ex_text) in enumerate(EXAMPLES.items()):
+            if ex_cols[i].button(ex_name, use_container_width=True):
+                st.session_state["text_input_area"] = ex_text
+                st.session_state["fetched_text"] = ex_text
  
         input_mode = st.radio("Si do ta japësh lajmin?", ["Ngjit tekstin", "Vendos link (URL)"], horizontal=True, label_visibility="collapsed")
  
         if input_mode == "Ngjit tekstin":
             text = st.text_area(
-                "Ngjit tekstin e një lajmi në shqip:"
+                "Ngjit tekstin e një lajmi në shqip:",
                 height=160,
                 placeholder="Ngjit titullin dhe/ose përmbajtjen e lajmit...",
                 key="text_input_area",
@@ -907,8 +938,9 @@ elif st.session_state["page"] == "analysis":
  
     if analyze:
         model_path = MODELS[model_choice]["path"]
+        model_type = MODELS[model_choice].get("type", "classifier")
         try:
-            label, confidence, all_probs = predict(text, model_path)
+            label, confidence, all_probs = predict(text, model_path, model_type)
             truth_pct = all_probs[0] * 100
             fairness = fairness_context(text, source_url)
  
