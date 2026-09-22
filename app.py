@@ -11,6 +11,7 @@ scores direkt, gjetje, debat, verdikt me pjesemarres/rast/fakte te verifikuara).
 import json
 import pathlib
 import re
+import time
  
 import requests
 import streamlit as st
@@ -243,7 +244,10 @@ FAKE_EXAMPLES = [
     ),
 ]
  
-GEMINI_MODEL_CANDIDATES = ["gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-flash-lite-latest"]
+GEMINI_MODEL_CANDIDATES = [
+    "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-flash-latest",
+    "gemini-3.5-flash-lite", "gemini-flash-lite-latest",
+]
  
  
 # ---------------------------------------------------------------------------
@@ -274,22 +278,28 @@ def _gemini_generate(contents, response_json=True, temperature=0.4):
         gen_config["responseMimeType"] = "application/json"
     errors = []
     for model_name in GEMINI_MODEL_CANDIDATES:
-        try:
-            resp = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
-                params={"key": api_key},
-                json={"contents": contents, "generationConfig": gen_config},
-                timeout=25,
-            )
-            if resp.status_code != 200:
+        # 503 = mbingarkese e perkohshme e Google, ia vlen 1 rikthim i shpejte
+        # 429 = kuota e ketij modeli u mbarua, s'ka kuptim te rikthehemi, kalojme te tjetri
+        for attempt in range(2):
+            try:
+                resp = requests.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
+                    params={"key": api_key},
+                    json={"contents": contents, "generationConfig": gen_config},
+                    timeout=25,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    st.session_state["_gemini_debug"] = ""
+                    return data["candidates"][0]["content"]["parts"][0]["text"]
+                if resp.status_code == 503 and attempt == 0:
+                    time.sleep(1.5)
+                    continue
                 errors.append(f"{model_name}: HTTP {resp.status_code} -- {resp.text[:300]}")
-                continue
-            data = resp.json()
-            st.session_state["_gemini_debug"] = ""
-            return data["candidates"][0]["content"]["parts"][0]["text"]
-        except Exception as e:
-            errors.append(f"{model_name}: {type(e).__name__} -- {e}")
-            continue
+                break
+            except Exception as e:
+                errors.append(f"{model_name}: {type(e).__name__} -- {e}")
+                break
     st.session_state["_gemini_debug"] = " | ".join(errors) if errors else "S'ka gabim te kapur, por s'u kthye pergjigje."
     return None
  
