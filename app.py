@@ -92,20 +92,20 @@ def _install_pwa_head_tags():
 MODELS = {
     "XLM-R": {
         "path": "almira123/xlmr-albanian-fake-news",
-        "description": "xlm-roberta-base — fine-tuned EN + AL",
+        "description": "xlm-roberta-base, i rregulluar për anglisht dhe shqip",
         "accuracy": "95.5%",
         "type": "classifier",
     },
     "mBERT": {
         "path": "almira123/mbert-albanian-fake-news",
-        "description": "bert-base-multilingual-cased — fine-tuned EN + AL",
+        "description": "bert-base-multilingual-cased, i rregulluar për anglisht dhe shqip",
         "accuracy": "91.1%",
         "type": "classifier",
     },
     "mT5": {
         "path": "almira123/mt5-albanian-fake-news",
-        "description": "mt5-small — model teksti-në-tekst (generative), fine-tuned EN + AL",
-        "accuracy": "shih Kreu 4.7",
+        "description": "mt5-small, model teksti-në-tekst, i rregulluar për anglisht dhe shqip",
+        "accuracy": "performancë e ndryshueshme",
         "type": "seq2seq",
     },
 }
@@ -282,11 +282,11 @@ def gemini_ruling(article_text: str, label: str, confidence: float) -> dict:
         "analysis_summary": "Analiza e detajuar me AI s'është e disponueshme (mungon çelësi Gemini te 'Secrets').",
         "key_findings": [
             {"tag": "Logjika", "text": "Aktivizo Gemini API te Secrets për gjetje të detajuara."},
-            {"tag": "Ekzagjerim", "text": "—"},
-            {"tag": "Evidencë", "text": "—"},
+            {"tag": "Ekzagjerim", "text": "Pa të dhëna ende."},
+            {"tag": "Evidencë", "text": "Pa të dhëna ende."},
         ],
-        "debate_supportive": {"author": "Lexuesi A", "text": "—"},
-        "debate_critical": {"author": "Lexuesi B", "text": "—"},
+        "debate_supportive": {"author": "Lexuesi A", "text": "Pa të dhëna ende."},
+        "debate_critical": {"author": "Lexuesi B", "text": "Pa të dhëna ende."},
         "verdict": "Vlerësimi bazohet vetëm te modeli klasifikues (shih Truth Score).",
         "headline": article_text.strip().split("\n")[0][:90],
     }
@@ -422,7 +422,7 @@ def chart_card(rel_path: str, caption_html: str):
         # gjithë faqen me një error.
         st.markdown(
             f"""<div class="chart-card">
-                <div class="fair-note">⚠ Grafiku "{rel_path}" nuk u gjet te repo-ja — ngarko dosjen static/charts/ te GitHub.</div>
+                <div class="fair-note">⚠ Grafiku "{rel_path}" nuk u gjet te repo-ja, ngarko dosjen static/charts/ te GitHub.</div>
                 <div class="chart-caption">{caption_html}</div>
             </div>""",
             unsafe_allow_html=True,
@@ -861,7 +861,7 @@ if st.session_state["page"] == "menu":
     top_bar()
  
     st.markdown(
-        '<div class="app-subtitle" style="margin-top:0.3rem;">Zbulues i lajmeve të rreme në shqip — analizo çdo lajm për saktësi dhe anësi.</div>',
+        '<div class="app-subtitle" style="margin-top:0.3rem;">Zbulues i lajmeve të rreme në shqip, të ndihmon të kuptosh sa e vërtetë dhe sa e anshme është një lajm.</div>',
         unsafe_allow_html=True,
     )
  
@@ -987,11 +987,11 @@ elif st.session_state["page"] == "analysis":
             fairness = result.get("fairness")
             if fairness:
                 with st.container(border=True, key="card_fairness"):
-                    st.markdown('<div class="app-card-title">Bias &amp; Fairness </div>', unsafe_allow_html=True)
+                    st.markdown('<div class="app-card-title">Bias &amp; Fairness</div>', unsafe_allow_html=True)
                     bias_fairness_row(fairness)
                     st.markdown(
-                        '<div class="fair-note">
-                        </div>',
+                        '<div class="fair-note">Këto shifra tregojnë si ka performuar modeli deri tani për grupin e temës/stilit '
+                        'të këtij lajmi, jo vetëm për këtë 1 artikull të vetëm.</div>',
                         unsafe_allow_html=True,
                     )
                     with st.expander("Detaje sipas grupit (temë/stil/burim)"):
@@ -1003,9 +1003,9 @@ elif st.session_state["page"] == "analysis":
                         st.markdown(f'<div class="fair-badge-row">{badges_html}</div>', unsafe_allow_html=True)
                         if fairness.get("domain") and fairness.get("domain_accuracy") is not None:
                             st.markdown(
-                                f'<div class="fair-badge-stat">Burimi <b>{fairness["domain"]}</b> — '
-                                f'accuracy historike: {fairness["domain_accuracy"]:.1f}% '
-                                f'(Jo EOG, thjesht accuracy përshkrues).</div>',
+                                f'<div class="fair-badge-stat">Burimi <b>{fairness["domain"]}</b>, '
+                                f'saktësi historike: {fairness["domain_accuracy"]:.1f}% '
+                                f'(vetëm saktësi, jo matje e drejtësisë/EOG).</div>',
                                 unsafe_allow_html=True,
                             )
  
@@ -1048,9 +1048,9 @@ elif st.session_state["page"] == "analysis":
  
         with result_tab_verdict:
             with st.expander("Pjesëmarrësit"):
-                st.markdown(f"**{sup.get('author','')}** — argument mbështetës")
-                st.markdown(f"**{crit.get('author','')}** — argument kritik")
-                st.markdown(f"**{model_choice}** — modeli klasifikues ({MODELS[model_choice]['accuracy']} saktësi)")
+                st.markdown(f"**{sup.get('author','')}**: argument mbështetës")
+                st.markdown(f"**{crit.get('author','')}**: argument kritik")
+                st.markdown(f"**{model_choice}**: modeli klasifikues ({MODELS[model_choice]['accuracy']} saktësi)")
  
             with st.expander("Të Dhënat e Rastit"):
                 st.text(result["text"][:1500])
@@ -1083,7 +1083,7 @@ elif st.session_state["page"] == "analysis":
 elif st.session_state["page"] == "chat":
     top_bar("Verifikimi AI")
     st.markdown(
-        '<p class="app-subtitle">Vendos një lajm ose pyetje më poshtë — Verifikimi AI përgjigjet direkt.</p>',
+        '<p class="app-subtitle">Vendos një lajm ose pyetje më poshtë, Verifikimi AI përgjigjet direkt.</p>',
         unsafe_allow_html=True,
     )
  
@@ -1138,7 +1138,7 @@ elif st.session_state["page"] == "findings":
     chart_card(
         "static/fairness_gjuhesor.png",
         'Pa asnjë të dhënë shqipe (vetëm transferim nga anglishtja), XLM-R duket "më i drejtë" sipas Equal '
-        'Opportunity Gap (0,003) — por kjo është artificiale: modeli kishte kolapsuar duke parashikuar "fake" '
+        'Opportunity Gap (0,003), por kjo është artificiale: modeli kishte kolapsuar duke parashikuar "fake" '
         "për çdo artikull. mBERT (EOG 0,212) dhe mT5 (EOG 0,488) pasqyrojnë hendekë realë mes gjuhëve. Kjo është "
         "arsyeja pse EOG nuk duhet lexuar kurrë i vetëm, pa metrika shoqëruese.",
     )
@@ -1147,15 +1147,15 @@ elif st.session_state["page"] == "findings":
     chart_card(
         "static/bias_gjatesia.png",
         "XLM-R few-shot, artikujt shqip të ndarë në tri grupe sipas numrit të fjalëve. Norma e gabimit (FNR) "
-        "rritet ndjeshëm te artikujt e gjatë — lajmet e rreme të gjata mbeten më shpesh të paidentifikuara.",
+        "rritet ndjeshëm te artikujt e gjatë, lajmet e rreme të gjata mbeten më shpesh të paidentifikuara.",
     )
  
-    st.markdown('<div class="section-label">Bias sipas temës — i njëjti kontekst që sheh te Analiza</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Bias sipas temës, i njëjti kontekst që sheh te Analiza</div>', unsafe_allow_html=True)
     chart_card(
         "static/bias_tema.png",
-        "Kategoria <b>Shëndetësi</b> ka recall dukshëm më të ulët se pjesa tjetër — modeli mbështetet shumë te "
+        "Kategoria <b>Shëndetësi</b> ka recall dukshëm më të ulët se pjesa tjetër, modeli mbështetet shumë te "
         "fjalori mjekësor i specializuar, më pak i pranishëm gjatë pre-trajnimit. Kjo është pikërisht statistika "
         "që përdor funksioni <code>fairness_context()</code> për t'i dhënë kontekst çdo analize në kohë reale.",
     )
  
-    st.info("Për metodologjinë e plotë (si u llogaritën FPR/FNR/EOG dhe kufizimet e tyre), shih Kreun III–IV të punimit të diplomës.")
+    st.info("Për metodologjinë e plotë, si u llogaritën FPR/FNR/EOG dhe kufizimet e tyre, shih punimin e diplomës.")
