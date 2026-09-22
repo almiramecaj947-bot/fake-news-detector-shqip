@@ -987,11 +987,11 @@ elif st.session_state["page"] == "analysis":
             fairness = result.get("fairness")
             if fairness:
                 with st.container(border=True, key="card_fairness"):
-                    st.markdown('<div class="app-card-title">Bias &amp; Fairness (Kreu 4.7 i punimit)</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="app-card-title">Bias &amp; Fairness </div>', unsafe_allow_html=True)
                     bias_fairness_row(fairness)
                     st.markdown(
-                        '<div class="fair-note">Kontekst nga vlerësimi i diplomës mbi 1.192 artikuj — jo bias/fairness i vetë '
-                        'këtij 1 artikulli (EOG/FPR/FNR maten mbi grupe, jo mbi 1 rast).</div>',
+                        '<div class="fair-note">
+                        </div>',
                         unsafe_allow_html=True,
                     )
                     with st.expander("Detaje sipas grupit (temë/stil/burim)"):
@@ -1005,7 +1005,7 @@ elif st.session_state["page"] == "analysis":
                             st.markdown(
                                 f'<div class="fair-badge-stat">Burimi <b>{fairness["domain"]}</b> — '
                                 f'accuracy historike: {fairness["domain_accuracy"]:.1f}% '
-                                f'(shih Kreu 4.7.3; jo EOG, thjesht accuracy përshkrues).</div>',
+                                f'(Jo EOG, thjesht accuracy përshkrues).</div>',
                                 unsafe_allow_html=True,
                             )
  
@@ -1112,7 +1112,7 @@ elif st.session_state["page"] == "findings":
     top_bar("Drejtësia & Bias-i i Modelit")
     st.markdown(
         '<p class="app-subtitle">Rezultatet e mëposhtme vijnë drejtpërdrejt nga vlerësimi i fairness-it '
-        'i kryer në punimin e diplomës (Kreu III–IV), mbi 1.192 artikuj shqip. Janë gjetjet reale që '
+        'i kryer në punimin e diplomës, mbi 1.192 artikuj shqip. Janë gjetjet reale që '
         'qëndrojnë pas kontekstit të fairness-it që sheh te Analiza e Detajuar.</p>',
         unsafe_allow_html=True,
     )
