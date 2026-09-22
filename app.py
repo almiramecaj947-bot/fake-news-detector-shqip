@@ -253,10 +253,12 @@ def _gemini_generate(contents, response_json=True, temperature=0.4):
     """Thirrje e pergjithshme Gemini. contents = lista Gemini-style [{'role':.., 'parts':[{'text':..}]}]."""
     api_key = _get_gemini_key()
     if not api_key:
+        st.session_state["_gemini_debug"] = "S'u gjet fare GEMINI_API_KEY te st.secrets (Settings -> Secrets)."
         return None
     gen_config = {"temperature": temperature}
     if response_json:
         gen_config["responseMimeType"] = "application/json"
+    errors = []
     for model_name in GEMINI_MODEL_CANDIDATES:
         try:
             resp = requests.post(
@@ -266,11 +268,15 @@ def _gemini_generate(contents, response_json=True, temperature=0.4):
                 timeout=25,
             )
             if resp.status_code != 200:
+                errors.append(f"{model_name}: HTTP {resp.status_code} -- {resp.text[:300]}")
                 continue
             data = resp.json()
+            st.session_state["_gemini_debug"] = ""
             return data["candidates"][0]["content"]["parts"][0]["text"]
-        except Exception:
+        except Exception as e:
+            errors.append(f"{model_name}: {type(e).__name__} -- {e}")
             continue
+    st.session_state["_gemini_debug"] = " | ".join(errors) if errors else "S'ka gabim te kapur, por s'u kthye pergjigje."
     return None
  
  
@@ -492,6 +498,10 @@ ICON_INFO = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns
 # ---------------------------------------------------------------------------
 st.set_page_config(page_title=APP_TITLE, page_icon="🛡️", layout="centered")
 _install_pwa_head_tags()
+
+if st.session_state.get("_gemini_debug"):
+    with st.expander("🔧 Debug Gemini (perkohshem -- hiqet me vone)", expanded=True):
+        st.code(st.session_state["_gemini_debug"])
  
 st.markdown(
     """
