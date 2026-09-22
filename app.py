@@ -81,8 +81,58 @@ def _install_pwa_head_tags():
         height=0,
         width=0,
     )
- 
- 
+
+
+def _install_swipe_menu():
+    """Lejon hapjen e menusë së navigimit (hamburger-i lart majtas) duke rrëshqitur
+    (swipe) faqen majtas me gisht, jo vetëm duke klikuar ikonën. E gjejmë butonin e
+    vërtetë të hamburger-it te DOM-i i vërtetë (window.parent.document) përmes klasës
+    'st-key-iconbtn_menu' të vendosur automatikisht nga Streamlit sipas key= dhe i
+    simulojmë një klik real kur zbulojmë një swipe majtas mjaftueshëm horizontal."""
+    components.html(
+        """
+        <script>
+        (function() {
+            var doc = window.parent.document;
+            if (doc.__truthnewsSwipeInstalled) return;
+            doc.__truthnewsSwipeInstalled = true;
+
+            var startX = 0, startY = 0, tracking = false;
+
+            function isTypingTarget(el) {
+                return el && el.closest && el.closest('textarea, input, [contenteditable="true"]');
+            }
+
+            doc.addEventListener('touchstart', function(e) {
+                if (!e.touches || e.touches.length !== 1) { tracking = false; return; }
+                if (isTypingTarget(e.target)) { tracking = false; return; }
+                startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+                tracking = true;
+            }, { passive: true });
+
+            doc.addEventListener('touchend', function(e) {
+                if (!tracking) return;
+                tracking = false;
+                var endTouch = (e.changedTouches && e.changedTouches[0]) || null;
+                if (!endTouch) return;
+                var dx = endTouch.clientX - startX;
+                var dy = endTouch.clientY - startY;
+                var horizontalEnough = Math.abs(dx) > Math.abs(dy) * 1.5;
+                var swipedLeft = dx < -70;
+                if (horizontalEnough && swipedLeft) {
+                    var btn = doc.querySelector('div[class*="st-key-iconbtn_menu"] button');
+                    if (btn) btn.click();
+                }
+            }, { passive: true });
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
 # NOTE: called after st.set_page_config() below -- components.html() is a
 # Streamlit command, and set_page_config() must be the very first Streamlit
 # command run in the script or Streamlit raises an error.
@@ -522,6 +572,7 @@ ICON_INFO = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns
 # ---------------------------------------------------------------------------
 st.set_page_config(page_title=APP_TITLE, page_icon="🛡️", layout="centered")
 _install_pwa_head_tags()
+_install_swipe_menu()
 
 if st.session_state.get("_gemini_debug"):
     with st.expander("🔧 Debug Gemini (perkohshem -- hiqet me vone)", expanded=True):
