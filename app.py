@@ -213,19 +213,30 @@ def fairness_context(text: str, source_url: str = None) -> dict:
     }
  
 EXAMPLES = {
-    "Shembull real": (
-        "Adelina e tepron me fustanin e shkurtër Adelina Tahiri është një ndër femrat më "
-        "provokuese në mediat rozë. Duke mos hezituar që të pozojë në forma të ndryshme, "
-        "këngëtarja duket gjithmonë e më e zjarrtë me stilin e veçantë që ka. Sidomos, në "
-        "imazhin e fundit me një fustan të shkurtër dhe të ngushtë ajo e teproi me pozën që "
-        "ka realizuar. Theksojmë, ajo kohëve të fundit mungon në projekte muzikore."
+    "Shembull real 1": (
+        "Këshilli Bashkiak i Tiranës miratoi sot buxhetin shtesë prej 2 milionë eurosh për "
+        "rikonstruksionin e tre kopshteve në zonën e Astirit. Sipas kryebashkiakut, punimet "
+        "parashikohet të përfundojnë brenda gjashtë muajve dhe do të përfshijnë ndërtimin e "
+        "hapësirave të reja të gjelbra për fëmijët."
     ),
-    "Shembull i rremë": (
+    "Shembull real 2": (
+        "Instituti i Statistikave (INSTAT) publikoi të dhënat për muajin gusht, duke raportuar "
+        "një rritje prej 3.2% të eksporteve krahasuar me të njëjtën periudhë të vitit të kaluar. "
+        "Sektori i tekstileve dhe këpucëve vazhdon të mbetet kontribuesi kryesor në këtë rritje."
+    ),
+    "Shembull i rremë 1": (
         "Kjo është mundësia e ardhjes së mërgimtarëve nga Gjermania. Gazetari i Deutsche "
         "Welle, Bahri Cani, ka folur për mundësitë që kanë kosovarët të cilët jetojnë në "
         "Gjermani për të ardhur drejtë Kosovës për pushime verore. “500 mijë shqiptarë sa "
         "jetojnë në Gjermani dëshirojnë që pushimet e tyre t’i kalojnë në Kosovë, Shqipëri "
         "dhe vendet tjera” — shiko pamjet se si mund të udhëtojnë mërgimtarët për në vendlindje."
+    ),
+    "Shembull i rremë 2": (
+        "SHOKUES: Një bimë e thjeshtë që rritet në çdo kopsht shqiptar zhduk plotësisht "
+        "DHIMBJET E KYÇEVE brenda 3 ditësh, thonë 'ekspertë'! Mjekët zyrtarë refuzojnë ta "
+        "pranojnë sepse humbasin fitimet nga barnat. Provoje vetë dhe SHIKO REZULTATET "
+        "menjëherë, mijëra njerëz e kanë ndarë tashmë këtë zbulim para se të FSHIHET nga "
+        "interneti!"
     ),
 }
  
@@ -529,6 +540,7 @@ st.markdown(
     footer { visibility: hidden; }
     [data-testid="stHeader"] { background: transparent; pointer-events: none; }
     [data-testid="stToolbar"] { display: none; }
+    [data-testid="InputInstructions"] { display: none !important; }
     .block-container { padding-top: 1.1rem; max-width: 720px; }
  
     h1, h2, h3, p, span, label, div { color: #17171a; }
@@ -912,11 +924,14 @@ elif st.session_state["page"] == "analysis":
     with st.container(border=True, key="card_input"):
         st.markdown('<div class="app-card-title">Vendos titullin ose lajmin</div>', unsafe_allow_html=True)
  
-        ex_cols = st.columns(len(EXAMPLES))
-        for i, (ex_name, ex_text) in enumerate(EXAMPLES.items()):
-            if ex_cols[i].button(ex_name, use_container_width=True):
-                st.session_state["text_input_area"] = ex_text
-                st.session_state["fetched_text"] = ex_text
+        example_items = list(EXAMPLES.items())
+        for row_start in range(0, len(example_items), 2):
+            row_pair = example_items[row_start:row_start + 2]
+            row_cols = st.columns(len(row_pair))
+            for col, (ex_name, ex_text) in zip(row_cols, row_pair):
+                if col.button(ex_name, use_container_width=True):
+                    st.session_state["text_input_area"] = ex_text
+                    st.session_state["fetched_text"] = ex_text
  
         input_mode = st.radio("Si do ta japësh lajmin?", ["Ngjit tekstin", "Vendos link (URL)"], horizontal=True, label_visibility="collapsed")
  
@@ -942,7 +957,7 @@ elif st.session_state["page"] == "analysis":
                         st.success(f"U morën {len(fetched)} karaktere.")
                     except ValueError as e:
                         st.error(str(e))
-            text = st.text_area("Teksti i marrë (mund ta redaktosh):", value=st.session_state.get("fetched_text", ""), height=160)
+            text = st.text_area("Teksti i marrë:", value=st.session_state.get("fetched_text", ""), height=160)
  
         analyze = st.button("ANALIZO", type="primary", use_container_width=True, disabled=not text.strip())
  
