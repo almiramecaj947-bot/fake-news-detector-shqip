@@ -309,7 +309,7 @@ def gemini_ruling(article_text: str, label: str, confidence: float) -> dict:
         "reliability_score": 50,
         "consensus_score": 50,
         "impact_score": 50,
-        "analysis_summary": "Analiza e detajuar me AI s'është e disponueshme (mungon çelësi Gemini te 'Secrets').",
+        "analysis_summary": "Analiza e detajuar me AI s'është e disponueshme momentalisht (shih kutinë Debug Gemini lart, nëse shfaqet, për arsyen e saktë).",
         "key_findings": [
             {"tag": "Logjika", "text": "Aktivizo Gemini API te Secrets për gjetje të detajuara."},
             {"tag": "Ekzagjerim", "text": "Pa të dhëna ende."},
