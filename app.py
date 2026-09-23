@@ -353,14 +353,18 @@ def _gemini_generate(contents, response_json=True, temperature=0.4):
     return None
  
  
-def gemini_ruling(article_text: str, label: str, confidence: float) -> dict:
-    fallback = {
+def _gemini_fallback(article_text: str) -> dict:
+    """Ndërtohet VETËM pasi të jetë thirrur _gemini_generate (jo më parë), që
+    st.session_state['_gemini_debug'] të përmbajë gabimin e KËSAJ thirrjeje, jo
+    të një thirrjeje të mëparshme apo bosh."""
+    _dbg = st.session_state.get("_gemini_debug") or "s'ka gabim të kapur -- kontrollo nëse GEMINI_API_KEY ekziston te Secrets."
+    return {
         "reliability_score": 50,
         "consensus_score": 50,
         "impact_score": 50,
-        "analysis_summary": "Analiza e detajuar me AI s'është e disponueshme momentalisht (shih kutinë Debug Gemini lart, nëse shfaqet, për arsyen e saktë).",
+        "analysis_summary": f"Analiza e detajuar me AI s'është e disponueshme momentalisht. Arsyeja e saktë: {_dbg}",
         "key_findings": [
-            {"tag": "Logjika", "text": "Aktivizo Gemini API te Secrets për gjetje të detajuara."},
+            {"tag": "Gabim Gemini", "text": _dbg[:180]},
             {"tag": "Ekzagjerim", "text": "Pa të dhëna ende."},
             {"tag": "Evidencë", "text": "Pa të dhëna ende."},
         ],
@@ -369,7 +373,9 @@ def gemini_ruling(article_text: str, label: str, confidence: float) -> dict:
         "verdict": "Vlerësimi bazohet vetëm te modeli klasifikues (shih Truth Score).",
         "headline": article_text.strip().split("\n")[0][:90],
     }
- 
+
+
+def gemini_ruling(article_text: str, label: str, confidence: float) -> dict:
     prompt = f"""Je një asistent i verifikimit të fakteve për një aplikacion demo diplome në shqip
 ("{APP_TITLE}"). Modeli i mësimit të makinës ka klasifikuar tekstin e mëposhtëm si "{label}"
 me {confidence*100:.1f}% siguri. Analizo vetë tekstin dhe kthe VETËM një objekt JSON (asnjë
@@ -396,14 +402,14 @@ Teksti i lajmit:
 """
     raw_text = _gemini_generate([{"parts": [{"text": prompt}]}], response_json=True)
     if raw_text is None:
-        return fallback
+        return _gemini_fallback(article_text)
     try:
         parsed = _extract_json(raw_text)
-        for key, default in fallback.items():
+        for key, default in _gemini_fallback(article_text).items():
             parsed.setdefault(key, default)
         return parsed
     except Exception:
-        return fallback
+        return _gemini_fallback(article_text)
  
  
 def gemini_chat_reply(history: list) -> str:
