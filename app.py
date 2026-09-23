@@ -84,84 +84,95 @@ def _install_pwa_head_tags():
 
 
 def _install_swipe_menu():
-    """Lejon hapjen e menusë së navigimit (hamburger-i lart majtas) duke rrëshqitur
-    (swipe) faqen majtas me gisht, jo vetëm duke klikuar ikonën. E gjejmë butonin e
-    vërtetë të hamburger-it te DOM-i i vërtetë (window.parent.document) përmes klasës
-    'st-key-iconbtn_menu' të vendosur automatikisht nga Streamlit sipas key= dhe i
-    simulojmë një klik real kur zbulojmë një swipe majtas mjaftueshëm horizontal."""
+    """Zgjeron zonën reale të prekshme (hit-area) të butonit ekzistues të hamburger-it
+    (st.popover me key='iconbtn_menu') që të mbulojë gjithë cepin lart-majtas te ekrani
+    (jo vetëm ikonën e vogël ☰), duke lënë vetëm ikonën e dukshme aty ku ishte. Kjo
+    perdor butonin E VERTETE te Streamlit-it (asnjë simulim klikimi), ndaj çdo prekje
+    ose rrëshqitje majtas brenda kësaj zone e hap menunë në mënyrë të natyrshme dhe
+    të qëndrueshme, pa varësi nga struktura e brendshme e DOM-it të Streamlit-it."""
     components.html(
         """
         <script>
         (function() {
             var doc = window.parent.document;
-            var win = window.parent;
-            if (doc.__truthnewsSwipeInstalled) return;
-            doc.__truthnewsSwipeInstalled = true;
-
-            var startX = 0, startY = 0, tracking = false;
-
-            function isTypingTarget(el) {
-                return el && el.closest && el.closest('textarea, input, [contenteditable="true"]');
-            }
-
-            function findMenuButton() {
-                var scoped = doc.querySelector('div[class*="st-key-iconbtn_menu"] button');
-                if (scoped) return scoped;
-                var all = Array.prototype.slice.call(doc.querySelectorAll('button'));
-                return all.find(function(b) { return (b.textContent || '').trim() === '☰'; }) || null;
-            }
-
-            function fireClick(el) {
-                var rect = el.getBoundingClientRect();
-                var cx = rect.left + rect.width / 2;
-                var cy = rect.top + rect.height / 2;
-                var opts = { bubbles: true, cancelable: true, composed: true, clientX: cx, clientY: cy, view: win };
-                ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function(type) {
-                    try {
-                        var Ctor = type.indexOf('pointer') === 0 ? win.PointerEvent : win.MouseEvent;
-                        el.dispatchEvent(new Ctor(type, opts));
-                    } catch (err) {
-                        el.dispatchEvent(new win.MouseEvent(type, opts));
-                    }
-                });
-            }
-
-            function showBanner(text, ok) {
-                var b = doc.createElement('div');
-                b.textContent = text;
-                b.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);' +
-                    'z-index:99999;padding:6px 14px;border-radius:8px;font-size:13px;font-family:sans-serif;' +
-                    'color:#fff;background:' + (ok ? '#1fa971' : '#d9534f') + ';box-shadow:0 2px 8px rgba(0,0,0,.25);';
-                doc.body.appendChild(b);
-                setTimeout(function() { b.remove(); }, 1400);
-            }
-
-            doc.addEventListener('touchstart', function(e) {
-                if (!e.touches || e.touches.length !== 1) { tracking = false; return; }
-                if (isTypingTarget(e.target)) { tracking = false; return; }
-                startX = e.touches[0].clientX;
-                startY = e.touches[0].clientY;
-                tracking = true;
-            }, { passive: true });
-
-            doc.addEventListener('touchend', function(e) {
-                if (!tracking) return;
-                tracking = false;
-                var endTouch = (e.changedTouches && e.changedTouches[0]) || null;
-                if (!endTouch) return;
-                var dx = endTouch.clientX - startX;
-                var dy = endTouch.clientY - startY;
-                var horizontalEnough = Math.abs(dx) > Math.abs(dy) * 1.5;
-                var swipedLeft = dx < -70;
-                if (horizontalEnough && swipedLeft) {
-                    var btn = findMenuButton();
-                    if (btn) {
-                        fireClick(btn);
-                        showBanner('Swipe u zbulua — po hap menune', true);
-                    } else {
-                        showBanner('Swipe u zbulua, por s\\'u gjet butoni ☰', false);
-                    }
+            if (doc.__truthnewsSwipeCSSInstalled) return;
+            doc.__truthnewsSwipeCSSInstalled = true;
+            var style = doc.createElement('style');
+            style.textContent = `
+                div[class*="st-key-iconbtn_menu"] {
+                    position: fixed !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    width: 46vw !important;
+                    height: 78px !important;
+                    z-index: 998 !important;
+                    background: transparent !important;
                 }
+                div[class*="st-key-iconbtn_menu"] > div {
+                    width: 100% !important;
+                    height: 100% !important;
+                }
+                div[class*="st-key-iconbtn_menu"] button {
+                    width: 100% !important;
+                    height: 100% !important;
+                    background: transparent !important;
+                    border: none !important;
+                    box-shadow: none !important;
+                    justify-content: flex-start !important;
+                    align-items: flex-start !important;
+                    padding-top: 0.5rem !important;
+                    padding-left: 0.4rem !important;
+                }
+            `;
+            doc.head.appendChild(style);
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
+def _install_touch_indicator():
+    """Për regjistrimin e videos: shfaq një rreth të vogël jeshil animuar në pikën
+    ku prek gishti, që në video të duket qartë ku po klikohet. Thjesht vizual,
+    s'ndikon në funksionalitet (pointer-events: none)."""
+    components.html(
+        """
+        <script>
+        (function() {
+            var doc = window.parent.document;
+            if (doc.__truthnewsTouchFx) return;
+            doc.__truthnewsTouchFx = true;
+            var style = doc.createElement('style');
+            style.textContent = `
+                @keyframes tnTapPulse {
+                    0% { transform: translate(-50%, -50%) scale(0.25); opacity: 0.9; }
+                    100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+                }
+                .tn-tap-fx {
+                    position: fixed;
+                    width: 56px;
+                    height: 56px;
+                    border-radius: 50%;
+                    background: rgba(31,169,113,0.35);
+                    border: 2px solid rgba(31,169,113,0.95);
+                    pointer-events: none;
+                    z-index: 999999;
+                    animation: tnTapPulse 0.55s ease-out forwards;
+                }
+            `;
+            doc.head.appendChild(style);
+            doc.addEventListener('touchstart', function(e) {
+                if (!e.touches) return;
+                Array.prototype.forEach.call(e.touches, function(t) {
+                    var dot = doc.createElement('div');
+                    dot.className = 'tn-tap-fx';
+                    dot.style.left = t.clientX + 'px';
+                    dot.style.top = t.clientY + 'px';
+                    doc.body.appendChild(dot);
+                    setTimeout(function() { dot.remove(); }, 560);
+                });
             }, { passive: true });
         })();
         </script>
@@ -611,6 +622,7 @@ ICON_INFO = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns
 st.set_page_config(page_title=APP_TITLE, page_icon="🛡️", layout="centered")
 _install_pwa_head_tags()
 _install_swipe_menu()
+_install_touch_indicator()
 
 if st.session_state.get("_gemini_debug"):
     with st.expander("🔧 Debug Gemini (perkohshem -- hiqet me vone)", expanded=True):
