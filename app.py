@@ -84,47 +84,85 @@ def _install_pwa_head_tags():
 
 
 def _install_swipe_menu():
-    """Zgjeron zonën reale të prekshme (hit-area) të butonit ekzistues të hamburger-it
-    (st.popover me key='iconbtn_menu') që të mbulojë gjithë cepin lart-majtas te ekrani
-    (jo vetëm ikonën e vogël ☰), duke lënë vetëm ikonën e dukshme aty ku ishte. Kjo
-    perdor butonin E VERTETE te Streamlit-it (asnjë simulim klikimi), ndaj çdo prekje
-    ose rrëshqitje majtas brenda kësaj zone e hap menunë në mënyrë të natyrshme dhe
-    të qëndrueshme, pa varësi nga struktura e brendshme e DOM-it të Streamlit-it."""
+    """Krijon një buton lundrues (floating) TOTALISHT TË PAVARUR, ngjitur direkt te
+    doc.body (jo brenda ndonjë div-i te Streamlit-i), i cili qëndron gjithmonë i
+    dukshëm në cep të ekranit -- edhe kur bëhet scroll poshtë. Streamlit-i shpesh
+    vendos 'transform' në ndonjë kontejner të brendshëm për animacione kalimi
+    faqesh, dhe kjo e prish 'position: fixed' për çdo element BRENDA atij
+    kontejneri (bëhet 'fixed' relativisht ndaj tij, jo ndaj ekranit -- kjo ishte
+    arsyeja pse zgjerimi i mëparshëm i butonit origjinal nuk qëndronte në vend).
+    Duke e krijuar këtë buton si fëmijë direkt i <body>, e shmang plotësisht këtë
+    problem. Kur klikohet, gjen butonin e VËRTETË ☰ të Streamlit-it dhe i simulon
+    një klik real, që hap menunë origjinale me 3 opsionet."""
     components.html(
         """
         <script>
         (function() {
             var doc = window.parent.document;
-            if (doc.__truthnewsSwipeCSSInstalled) return;
-            doc.__truthnewsSwipeCSSInstalled = true;
+            var win = window.parent;
+            if (doc.__truthnewsFloatMenu) return;
+            doc.__truthnewsFloatMenu = true;
+
             var style = doc.createElement('style');
             style.textContent = `
-                div[class*="st-key-iconbtn_menu"] {
-                    position: fixed !important;
-                    top: 0 !important;
-                    left: 0 !important;
-                    width: 46vw !important;
-                    height: 78px !important;
-                    z-index: 998 !important;
-                    background: transparent !important;
+                #tn-float-menu-btn {
+                    position: fixed;
+                    top: 14px;
+                    left: 14px;
+                    width: 46px;
+                    height: 46px;
+                    border-radius: 50%;
+                    background: #17171a;
+                    color: #fff;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 20px;
+                    box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+                    z-index: 999999;
+                    cursor: pointer;
+                    -webkit-tap-highlight-color: transparent;
+                    user-select: none;
                 }
-                div[class*="st-key-iconbtn_menu"] > div {
-                    width: 100% !important;
-                    height: 100% !important;
-                }
-                div[class*="st-key-iconbtn_menu"] button {
-                    width: 100% !important;
-                    height: 100% !important;
-                    background: transparent !important;
-                    border: none !important;
-                    box-shadow: none !important;
-                    justify-content: flex-start !important;
-                    align-items: flex-start !important;
-                    padding-top: 0.5rem !important;
-                    padding-left: 0.4rem !important;
-                }
+                #tn-float-menu-btn:active { background: #1fa971; }
             `;
             doc.head.appendChild(style);
+
+            var btn = doc.createElement('div');
+            btn.id = 'tn-float-menu-btn';
+            btn.textContent = '\\u2630';
+            doc.body.appendChild(btn);
+
+            function findRealMenuButton() {
+                var scoped = doc.querySelector('div[class*="st-key-iconbtn_menu"] button');
+                if (scoped) return scoped;
+                var all = Array.prototype.slice.call(doc.querySelectorAll('button'));
+                return all.find(function(b) { return (b.textContent || '').trim() === '\\u2630'; }) || null;
+            }
+
+            function fireClick(el) {
+                var rect = el.getBoundingClientRect();
+                var cx = rect.left + rect.width / 2;
+                var cy = rect.top + rect.height / 2;
+                var opts = { bubbles: true, cancelable: true, composed: true, clientX: cx, clientY: cy, view: win };
+                ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function(type) {
+                    try {
+                        var Ctor = type.indexOf('pointer') === 0 ? win.PointerEvent : win.MouseEvent;
+                        el.dispatchEvent(new Ctor(type, opts));
+                    } catch (err) {
+                        el.dispatchEvent(new win.MouseEvent(type, opts));
+                    }
+                });
+            }
+
+            function openMenu(e) {
+                e.preventDefault();
+                var real = findRealMenuButton();
+                if (real) fireClick(real);
+            }
+
+            btn.addEventListener('click', openMenu);
+            btn.addEventListener('touchend', openMenu);
         })();
         </script>
         """,
