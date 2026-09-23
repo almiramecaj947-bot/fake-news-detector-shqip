@@ -614,7 +614,7 @@ st.markdown(
     /* FIXED (jo absolute): absolute ishte relativ ndaj .block-container-it, ndaj
        ikonat "ikninin" me faqen kur bëhej scroll poshtë. Fixed i mban gjithmonë
        ngjitur te ekrani, pavarësisht sa poshtë ka shkuar përdoruesi. */
-    div[class*="st-key-iconbtn_menu"] { position: fixed !important; top: 0.6rem; left: 0.6rem; z-index: 999999; }
+    div[class*="st-key-iconbtn_menu"] { position: fixed !important; top: 3.4rem; left: 0.6rem; z-index: 999999; }
     div[class*="st-key-iconbtn_profile"] { position: fixed !important; top: 0.6rem; right: 0.6rem; z-index: 999999; }
     div[class*="st-key-iconbtn_"] [data-testid="stElementContainer"] { margin: 0 !important; }
     div[class*="st-key-iconbtn_"] [data-testid="stVerticalBlockBorderWrapper"] { margin: 0 !important; }
