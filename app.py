@@ -83,94 +83,6 @@ def _install_pwa_head_tags():
     )
 
 
-def _install_swipe_menu():
-    """Krijon një buton lundrues (floating) TOTALISHT TË PAVARUR, ngjitur direkt te
-    doc.body (jo brenda ndonjë div-i te Streamlit-i), i cili qëndron gjithmonë i
-    dukshëm në cep të ekranit -- edhe kur bëhet scroll poshtë. Streamlit-i shpesh
-    vendos 'transform' në ndonjë kontejner të brendshëm për animacione kalimi
-    faqesh, dhe kjo e prish 'position: fixed' për çdo element BRENDA atij
-    kontejneri (bëhet 'fixed' relativisht ndaj tij, jo ndaj ekranit -- kjo ishte
-    arsyeja pse zgjerimi i mëparshëm i butonit origjinal nuk qëndronte në vend).
-    Duke e krijuar këtë buton si fëmijë direkt i <body>, e shmang plotësisht këtë
-    problem. Kur klikohet, gjen butonin e VËRTETË ☰ të Streamlit-it dhe i simulon
-    një klik real, që hap menunë origjinale me 3 opsionet."""
-    components.html(
-        """
-        <script>
-        (function() {
-            var doc = window.parent.document;
-            var win = window.parent;
-            if (doc.__truthnewsFloatMenu) return;
-            doc.__truthnewsFloatMenu = true;
-
-            var style = doc.createElement('style');
-            style.textContent = `
-                #tn-float-menu-btn {
-                    position: fixed;
-                    top: 14px;
-                    left: 14px;
-                    width: 46px;
-                    height: 46px;
-                    border-radius: 50%;
-                    background: #17171a;
-                    color: #fff;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 20px;
-                    box-shadow: 0 3px 10px rgba(0,0,0,0.35);
-                    z-index: 999999;
-                    cursor: pointer;
-                    -webkit-tap-highlight-color: transparent;
-                    user-select: none;
-                }
-                #tn-float-menu-btn:active { background: #1fa971; }
-            `;
-            doc.head.appendChild(style);
-
-            var btn = doc.createElement('div');
-            btn.id = 'tn-float-menu-btn';
-            btn.textContent = '\\u2630';
-            doc.body.appendChild(btn);
-
-            function findRealMenuButton() {
-                var scoped = doc.querySelector('div[class*="st-key-iconbtn_menu"] button');
-                if (scoped) return scoped;
-                var all = Array.prototype.slice.call(doc.querySelectorAll('button'));
-                return all.find(function(b) { return (b.textContent || '').trim() === '\\u2630'; }) || null;
-            }
-
-            function fireClick(el) {
-                var rect = el.getBoundingClientRect();
-                var cx = rect.left + rect.width / 2;
-                var cy = rect.top + rect.height / 2;
-                var opts = { bubbles: true, cancelable: true, composed: true, clientX: cx, clientY: cy, view: win };
-                ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function(type) {
-                    try {
-                        var Ctor = type.indexOf('pointer') === 0 ? win.PointerEvent : win.MouseEvent;
-                        el.dispatchEvent(new Ctor(type, opts));
-                    } catch (err) {
-                        el.dispatchEvent(new win.MouseEvent(type, opts));
-                    }
-                });
-            }
-
-            function openMenu(e) {
-                e.preventDefault();
-                var real = findRealMenuButton();
-                if (real) fireClick(real);
-            }
-
-            btn.addEventListener('click', openMenu);
-            btn.addEventListener('touchend', openMenu);
-        })();
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
-
-
 def _install_touch_indicator():
     """Për regjistrimin e videos: shfaq një rreth të vogël jeshil animuar në pikën
     ku prek gishti, që në video të duket qartë ku po klikohet. Thjesht vizual,
@@ -659,7 +571,6 @@ ICON_INFO = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns
 # ---------------------------------------------------------------------------
 st.set_page_config(page_title=APP_TITLE, page_icon="🛡️", layout="centered")
 _install_pwa_head_tags()
-_install_swipe_menu()
 _install_touch_indicator()
 
 if st.session_state.get("_gemini_debug"):
@@ -684,8 +595,11 @@ st.markdown(
        "ngjiten" në cepat e block-container-it, që titulli mund të qëndrojë i qendërzuar
        pa u prekur nga sjellja e paqëndrueshme e st.columns në gjerësi telefoni. */
     .block-container { position: relative; }
-    div[class*="st-key-iconbtn_menu"] { position: absolute; top: 0.15rem; left: 0; z-index: 999; }
-    div[class*="st-key-iconbtn_profile"] { position: absolute; top: 0.15rem; right: 0; z-index: 999; }
+    /* FIXED (jo absolute): absolute ishte relativ ndaj .block-container-it, ndaj
+       ikonat "ikninin" me faqen kur bëhej scroll poshtë. Fixed i mban gjithmonë
+       ngjitur te ekrani, pavarësisht sa poshtë ka shkuar përdoruesi. */
+    div[class*="st-key-iconbtn_menu"] { position: fixed !important; top: 0.6rem; left: 0.6rem; z-index: 999999; }
+    div[class*="st-key-iconbtn_profile"] { position: fixed !important; top: 0.6rem; right: 0.6rem; z-index: 999999; }
     div[class*="st-key-iconbtn_"] [data-testid="stElementContainer"] { margin: 0 !important; }
     div[class*="st-key-iconbtn_"] [data-testid="stVerticalBlockBorderWrapper"] { margin: 0 !important; }
     #MainMenu { visibility: hidden; }
