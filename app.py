@@ -294,8 +294,11 @@ FAKE_EXAMPLES = [
 ]
  
 GEMINI_MODEL_CANDIDATES = [
-    "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-flash-latest",
-    "gemini-3.5-flash-lite", "gemini-flash-lite-latest",
+    # gemini-2.5-* japin HTTP 404 -- Google i ka hequr per perdorues te rinj (12 shtator
+    # 2026): "no longer available to new users". Perdorim direkt familjen 3.x, i vetmi
+    # brez qe Google e rekomandon tani vete per llogari te reja.
+    "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite",
+    "gemini-3.8-flash", "gemini-flash-latest", "gemini-flash-lite-latest",
 ]
  
  
@@ -329,13 +332,15 @@ def _gemini_generate(contents, response_json=True, temperature=0.4):
     for model_name in GEMINI_MODEL_CANDIDATES:
         # 503 = mbingarkese e perkohshme e Google, ia vlen 1 rikthim i shpejte
         # 429 = kuota e ketij modeli u mbarua, s'ka kuptim te rikthehemi, kalojme te tjetri
+        # 404 = modeli s'ekziston/u hoq per perdorues te rinj, kalojme direkt te tjetri
+        # ReadTimeout = mund te jete rrjeti/ngarkimi, ia vlen 1 rikthim para se te heqim dore
         for attempt in range(2):
             try:
                 resp = requests.post(
                     f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
                     params={"key": api_key},
                     json={"contents": contents, "generationConfig": gen_config},
-                    timeout=25,
+                    timeout=40,
                 )
                 if resp.status_code == 200:
                     data = resp.json()
@@ -345,6 +350,11 @@ def _gemini_generate(contents, response_json=True, temperature=0.4):
                     time.sleep(1.5)
                     continue
                 errors.append(f"{model_name}: HTTP {resp.status_code} -- {resp.text[:300]}")
+                break
+            except requests.exceptions.ReadTimeout:
+                if attempt == 0:
+                    continue
+                errors.append(f"{model_name}: ReadTimeout -- s'u përgjigj brenda 40s")
                 break
             except Exception as e:
                 errors.append(f"{model_name}: {type(e).__name__} -- {e}")
